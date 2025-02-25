@@ -1,0 +1,8 @@
+streamlit
+easyocr
+numpy
+pdfplumber
+torch
+inference-sdk
+Pillow
+pyzbar
