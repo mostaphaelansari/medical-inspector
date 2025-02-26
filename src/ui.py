@@ -4,44 +4,108 @@ import json
 import os
 from datetime import datetime
 import zipfile
-from typing import Dict
+from typing import Dict, Any
 import streamlit as st
 from .config import ALLOWED_EXTENSIONS, CSS_STYLE
 from .processing import process_uploaded_file
-from .comparison import compare_rvd_aed, compare_rvd_images
+from .comparison import compare_data
 
-def display_comparison(title: str, comparison: Dict[str, Dict[str, str]]) -> None:
-    """Display comparison results in a formatted way.
+def display_section_comparison(title: str, section_data: Dict[str, Dict]) -> None:
+    """Display comparison results for a specific equipment section.
 
     Args:
-        title: Title of the comparison.
-        comparison: Comparison data.
+        title: Title of the section.
+        section_data: Comparison data for the section.
     """
-    if not comparison:
-        st.warning("Aucune donnée de comparaison disponible")
+    if not section_data:
         return
+    
     st.subheader(title)
-    for field, data in comparison.items():
-        with st.container():
-            cols = st.columns([3, 2, 2, 1])
-            cols[0].markdown(f"**{field.replace('_', ' ').title()}**")
-            cols[1].markdown(f"*RVD:*  \n`{data.get('rvd', 'N/A')}`")
-            compare_type = 'AED' if 'aed' in data else 'Image'
-            compare_value = data.get(compare_type.lower(), 'N/A')
-            cols[2].markdown(f"*{compare_type}:*  \n`{compare_value}`")
-            if data.get('match', False):
-                cols[3].success("✅")
-            else:
-                cols[3].error("❌")
-            if 'errors' in data:
-                for err in data['errors']:
-                    st.error(err)
-            if 'error' in data:
-                st.error(data['error'])
+    
+    for field, data in section_data.items():
+        if isinstance(data, dict) and 'match_rvd_aed' in data:
+            # Field has both RVD and AED comparison
+            with st.container():
+                cols = st.columns([3, 2, 2, 1])
+                cols[0].markdown(f"**{field.replace('_', ' ').title()}**")
+                cols[1].markdown(f"*RVD:*  \n`{data.get('rvd', 'N/A')}`")
+                cols[2].markdown(f"*AED:*  \n`{data.get('aed', 'N/A')}`")
+                if data.get('match_rvd_aed', False):
+                    cols[3].success("✅")
+                else:
+                    cols[3].error("❌")
+                
+                # If there's also image data
+                if 'image' in data:
+                    cols = st.columns([3, 2, 2, 1])
+                    cols[0].markdown("")
+                    cols[1].markdown(f"*RVD:*  \n`{data.get('rvd', 'N/A')}`")
+                    cols[2].markdown(f"*Image:*  \n`{data.get('image', 'N/A')}`")
+                    if data.get('match_rvd_image', False):
+                        cols[3].success("✅")
+                    else:
+                        cols[3].error("❌")
+                
+        elif isinstance(data, dict) and ('match' in data):
+            # Regular comparison field (RVD vs Image or RVD vs AED)
+            with st.container():
+                cols = st.columns([3, 2, 2, 1])
+                cols[0].markdown(f"**{field.replace('_', ' ').title()}**")
+                cols[1].markdown(f"*RVD:*  \n`{data.get('rvd', 'N/A')}`")
+                
+                # Determine the comparison type
+                if 'aed' in data:
+                    compare_type = 'AED'
+                    compare_value = data.get('aed', 'N/A')
+                else:
+                    compare_type = 'Image'
+                    compare_value = data.get('image', 'N/A')
+                
+                cols[2].markdown(f"*{compare_type}:*  \n`{compare_value}`")
+                
+                if data.get('match', False):
+                    cols[3].success("✅")
+                else:
+                    cols[3].error("❌")
+                
+                if 'errors' in data:
+                    for err in data['errors']:
+                        st.error(err)
+                if 'error' in data:
+                    st.error(data['error'])
+                
+        elif field == 'adultes' or field == 'pediatriques':
+            # Nested subsection (for electrodes)
+            st.markdown(f"**{field.title()}:**")
+            for subfield, subdata in data.items():
+                with st.container():
+                    cols = st.columns([3, 2, 2, 1])
+                    cols[0].markdown(f"→ {subfield.replace('_', ' ').title()}")
+                    cols[1].markdown(f"*RVD:*  \n`{subdata.get('rvd', 'N/A')}`")
+                    
+                    # Determine the comparison type for nested field
+                    if 'aed' in subdata:
+                        compare_type = 'AED'
+                        compare_value = subdata.get('aed', 'N/A')
+                    else:
+                        compare_type = 'Image'
+                        compare_value = subdata.get('image', 'N/A')
+                    
+                    cols[2].markdown(f"*{compare_type}:*  \n`{compare_value}`")
+                    
+                    if subdata.get('match', False):
+                        cols[3].success("✅")
+                    else:
+                        cols[3].error("❌")
+                    
+                    if 'errors' in subdata:
+                        for err in subdata['errors']:
+                            st.error(err)
+        
         st.markdown("---")
 
 def setup_session_state():
-    """Initialize session state variables."""
+    """Initialiser les variables d'état de session."""
     if 'processed_data' not in st.session_state:
         st.session_state.processed_data = {
             'RVD': {},
@@ -49,7 +113,11 @@ def setup_session_state():
             'AEDG3': {},
             'images': [],
             'files': [],
-            'comparisons': {'rvd_vs_aed': {}, 'rvd_vs_images': {}}
+            'comparisons': {
+                'defibrillateur': {},
+                'batterie': {},
+                'electrodes': {}
+            }
         }
     if 'dae_type' not in st.session_state:
         st.session_state.dae_type = 'G5'
@@ -57,7 +125,7 @@ def setup_session_state():
         st.session_state.uploaded_files = []
 
 def render_ui(client, reader):
-    """Render the Streamlit UI."""
+    """Afficher l'interface utilisateur Streamlit."""
     st.set_page_config(page_title="Inspecteur de dispositifs médicaux", layout="wide")
     st.markdown(CSS_STYLE, unsafe_allow_html=True)
     setup_session_state()
@@ -162,64 +230,118 @@ def render_ui(client, reader):
                     st.success(f"Traitement terminé pour tous les {total_files} fichiers.")
 
     with tab2:
-        st.title("📊 Analyse de données traitées")
+        st.markdown("""
+        <div style="padding: 10px 0; margin-bottom: 20px;">
+            <h1 style="margin: 0; font-size: 2rem;">📊 Analyse des données traitées</h1>
+            <p style="opacity: 0.8;">Visualisation des données extraites des documents</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Display processed RVD and AED data
-        with st.expander("Données traitées", expanded=True):
+        with st.expander("Données extraites", expanded=True):
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("Données RVD")
-                st.json(st.session_state.processed_data['RVD'], expanded=False)
+                if st.session_state.processed_data['RVD']:
+                    st.json(st.session_state.processed_data['RVD'], expanded=False)
+                else:
+                    st.info("Aucune donnée RVD n'a été traitée.")
+            
             with col2:
                 st.subheader(f"Données AED {st.session_state.dae_type}")
                 aed_type = f'AEDG{st.session_state.dae_type[-1]}'
                 aed_data = st.session_state.processed_data.get(aed_type, {})
-                st.json(aed_data if aed_data else {"status": "Aucune donnée AED trouvée"}, expanded=False)
+                if aed_data:
+                    st.json(aed_data, expanded=False)
+                else:
+                    st.info("Aucune donnée AED n'a été trouvée.")
         
-        # Display all images, including unclassified or errored ones
         if st.session_state.processed_data['images']:
             with st.expander("Résultats d'analyse d'images", expanded=True):
+                st.markdown("### Images traitées")
                 cols = st.columns(3)
                 for idx, img_data in enumerate(st.session_state.processed_data['images']):
                     with cols[idx % 3]:
+                        st.markdown(f"""
+                        <div class="image-card">
+                        """, unsafe_allow_html=True)
                         st.image(img_data['image'], use_container_width=True)
                         
-                        # Customize display based on image type
                         type_display = img_data['type']
+                        status_icon = "✅"
                         if type_display in ['Non classifié', 'Erreur de classification', 'Erreur de traitement']:
-                            type_display = f"{type_display} ⚠️"
+                            status_icon = "⚠️"
                         
                         st.markdown(
                             f"""
-                            **Type:** {type_display}  
-                            **Numéro de série:** {img_data.get('serial', 'N/A')}  
-                            **Date:** {img_data.get('date', 'N/A')}
+                            <div style="padding: 10px 5px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <strong style="font-size: 16px;">{type_display}</strong>
+                                    <span style="font-size: 18px;">{status_icon}</span>
+                                </div>
+                                <div style="font-size: 14px; margin-bottom: 5px;">
+                                    <strong>Numéro de série:</strong> {img_data.get('serial', 'N/D')}
+                                </div>
+                                <div style="font-size: 14px;">
+                                    <strong>Date:</strong> {img_data.get('date', 'N/D')}
+                                </div>
+                            </div>
                             """,
                             unsafe_allow_html=True
                         )
+                        st.markdown("</div>", unsafe_allow_html=True)
         else:
             st.info("Aucune image traitée à afficher pour le moment.")
 
     with tab3:
-        st.title("📋v📑 Comparaison des documents")
+        st.title("📋vs📑 Comparaison des documents")
         with st.expander("Comparaison des documents", expanded=True):
-            # Removed the button and its styling
-            aed_results = compare_rvd_aed()
-            image_results = compare_rvd_images()
-            display_comparison("Comparaison RVD vs Rapport AED", aed_results)
-            display_comparison("Comparaison RVD vs Données d'images", image_results)
+            # Run comparison and get results organized by equipment sections
+            comparison_results = compare_data()
+            
+            # Display results by equipment section
+            display_section_comparison("Défibrillateur", comparison_results.get('defibrillateur', {}))
+            display_section_comparison("Batterie", comparison_results.get('batterie', {}))
+            display_section_comparison("Électrodes", comparison_results.get('electrodes', {}))
+            
+            # Check if all matches are successful
+            def check_matches(section_data):
+                for key, value in section_data.items():
+                    if isinstance(value, dict):
+                        if 'match' in value and not value.get('match', False):
+                            return False
+                        if 'match_rvd_aed' in value and not value.get('match_rvd_aed', False):
+                            return False
+                        if 'match_rvd_image' in value and not value.get('match_rvd_image', False):
+                            return False
+                        if key in ['adultes', 'pediatriques']:
+                            if not check_matches(value):
+                                return False
+                return True
+            
             all_matches = all(
-                item.get('match', False)
-                for comp in [aed_results, image_results]
-                for item in comp.values()
+                check_matches(section_data)
+                for section_name, section_data in comparison_results.items()
             )
+            
             if all_matches:
                 st.success("Tous les contrôles sont réussis ! Le dispositif est conforme.")
             else:
-                failed = [
-                    k for comp in [aed_results, image_results]
-                    for k, v in comp.items() if not v.get('match', True)
-                ]
+                # Collect failed checks
+                failed = []
+                for section_name, section_data in comparison_results.items():
+                    for field, data in section_data.items():
+                        if isinstance(data, dict):
+                            if 'match' in data and not data.get('match', False):
+                                failed.append(f"{section_name} - {field}")
+                            if 'match_rvd_aed' in data and not data.get('match_rvd_aed', False):
+                                failed.append(f"{section_name} - {field} (RVD vs AED)")
+                            if 'match_rvd_image' in data and not data.get('match_rvd_image', False):
+                                failed.append(f"{section_name} - {field} (RVD vs Image)")
+                            if field in ['adultes', 'pediatriques']:
+                                for subfield, subdata in data.items():
+                                    if 'match' in subdata and not subdata.get('match', False):
+                                        failed.append(f"{section_name} - {field} - {subfield}")
+                
                 st.error(f"Échec de validation pour : {', '.join(failed)}")
 
     with tab4:
@@ -245,9 +367,11 @@ def render_ui(client, reader):
                                 date_str = datetime.now().strftime("%Y%m%d")
                                 with zipfile.ZipFile('export.zip', 'w', zipfile.ZIP_DEFLATED) as zipf:
                                     zipf.writestr(
-                                        'processed_data.json',
+                                        'donnees_traitees.json',
                                         json.dumps(st.session_state.processed_data, indent=2)
                                     )
+                                    
+                                    # Build summary with the new section-based structure
                                     summary = (
                                         "Résumé de l'inspection\n\n"
                                         "Données RVD:\n" +
@@ -255,16 +379,41 @@ def render_ui(client, reader):
                                         "\n\n" +
                                         f"Données AED {st.session_state.dae_type}:\n" +
                                         json.dumps(st.session_state.processed_data[f'AEDG{st.session_state.dae_type[-1]}'], indent=2) +
-                                        "\n\nComparaisons:\n"
+                                        "\n\nComparaisons par section:\n"
                                     )
-                                    for comp_type, comp_data in st.session_state.processed_data['comparisons'].items():
-                                        summary += f"{comp_type.replace('_vs_', ' vs ').upper()}:\n"
-                                        for field, data in comp_data.items():
-                                            summary += (
-                                                f"  {field.replace('_', ' ').title()}: "
-                                                f"{'✅' if data.get('match', False) else '❌'}\n"
-                                            )
-                                    zipf.writestr("summary.txt", summary)
+                                    
+                                    # Add section-based comparisons
+                                    for section_name, section_data in st.session_state.processed_data['comparisons'].items():
+                                        summary += f"\n{section_name.upper()}:\n"
+                                        
+                                        for field, data in section_data.items():
+                                            if isinstance(data, dict):
+                                                if 'match' in data:
+                                                    summary += (
+                                                        f"  {field.replace('_', ' ').title()}: "
+                                                        f"{'✅' if data.get('match', False) else '❌'}\n"
+                                                    )
+                                                elif 'match_rvd_aed' in data:
+                                                    summary += (
+                                                        f"  {field.replace('_', ' ').title()} (RVD vs AED): "
+                                                        f"{'✅' if data.get('match_rvd_aed', False) else '❌'}\n"
+                                                    )
+                                                    if 'match_rvd_image' in data:
+                                                        summary += (
+                                                            f"  {field.replace('_', ' ').title()} (RVD vs Image): "
+                                                            f"{'✅' if data.get('match_rvd_image', False) else '❌'}\n"
+                                                        )
+                                                elif field in ['adultes', 'pediatriques']:
+                                                    summary += f"  {field.title()}:\n"
+                                                    for subfield, subdata in data.items():
+                                                        if 'match' in subdata:
+                                                            summary += (
+                                                                f"    {subfield.replace('_', ' ').title()}: "
+                                                                f"{'✅' if subdata.get('match', False) else '❌'}\n"
+                                                            )
+                                    
+                                    zipf.writestr("resume.txt", summary)
+                                    
                                     if 'uploaded_files' in st.session_state:
                                         for uploaded_file in st.session_state.uploaded_files:
                                             if (
@@ -280,6 +429,7 @@ def render_ui(client, reader):
                                                 else:
                                                     new_name = f"IMAGE_{code_site}_{date_str}_{uploaded_file.name}"
                                                 zipf.writestr(new_name, original_bytes)
+                                
                                 st.session_state.export_ready = True
                                 if os.path.exists('export.zip'):
                                     with open("export.zip", "rb") as f:
@@ -289,6 +439,7 @@ def render_ui(client, reader):
                                             file_name=f"Inspection_{code_site}_{date_str}.zip",
                                             mime="application/zip"
                                         )
+            
             with col_preview:
                 st.markdown("#### 👁️ Aperçu de l'export")
                 if st.session_state.get('export_ready'):
@@ -296,8 +447,8 @@ def render_ui(client, reader):
                     preview_data = {
                         "format": export_format,
                         "fichiers_inclus": [
-                            "processed_data.json",
-                            "summary.txt",
+                            "donnees_traitees.json",
+                            "resume.txt",
                             *(
                                 ["images.zip"]
                                 if include_images and any(
@@ -307,7 +458,7 @@ def render_ui(client, reader):
                                 else []
                             )
                         ],
-                        "taille_estimee": f"{(len(st.session_state.get('uploaded_files', []))*0.5):.1f} MB"
+                        "taille_estimee": f"{(len(st.session_state.get('uploaded_files', []))*0.5):.1f} Mo"
                     }
                     st.json(preview_data)
                     if os.path.exists('export.zip'):
