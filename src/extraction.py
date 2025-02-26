@@ -6,8 +6,6 @@ from PIL import Image, ImageEnhance, ImageFilter
 from pyzbar.pyzbar import decode
 import streamlit as st
 
-import re
-from typing import Dict, List, Optional
 
 def extract_rvd_data(text: str) -> Dict[str, str]:
     """Extract relevant data from the RVD text.
