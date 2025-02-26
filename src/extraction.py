@@ -6,15 +6,24 @@ from PIL import Image, ImageEnhance, ImageFilter
 from pyzbar.pyzbar import decode
 import streamlit as st
 
+import re
+from typing import Dict, List, Optional
+
 def extract_rvd_data(text: str) -> Dict[str, str]:
     """Extract relevant data from the RVD text.
-
     Args:
         text: Text extracted from the RVD PDF.
-
     Returns:
         Extracted data with keywords as keys.
     """
+    def get_next_valid_line(lines: List[str], current_index: int, keyword: str) -> str:
+        """Get the next non-empty line after the keyword line that might contain the value."""
+        if current_index + 1 < len(lines):
+            next_line = lines[current_index + 1].strip()
+            if next_line and not any(kw.lower() in next_line.lower() for kw in keywords):
+                return next_line
+        return "Non trouvé"
+    
     keywords = [
         "Commentaire fin d'intervention et recommandations",
         "Date-Heure rapport vérification défibrillateur",
@@ -22,11 +31,11 @@ def extract_rvd_data(text: str) -> Dict[str, str]:
         #Défibrillateur
         "Numéro de série DEFIBRILLATEUR",
         "Numéro de série relevé",
-        "Date fabrication relevée",
         "Date fabrication DEFIBRILLATEUR",
+        "Date fabrication relevée",
         
+       
         #Batterie
-
         "Numéro de série Batterie",
         "Numéro de série relevé 2",
         "Date fabrication BATTERIE",
@@ -39,19 +48,15 @@ def extract_rvd_data(text: str) -> Dict[str, str]:
         "Date mise en service",
         "Date fabrication nouvelle batterie",
         "Niveau de charge nouvelle batterie",
-
         #Electrodes Adultes
-
         "Numéro de série ELECTRODES ADULTES",
         "Numéro de série ELECTRODES ADULTES relevé",
         "Date de péremption ELECTRODES ADULTES",
         "Date de péremption ELECTRODES ADULTES relevée",
-        "Changement électrodes adultes", 
+        "Changement électrodes adultes",
         "N° série nouvelles électrodes",
         "Date péremption des nouvelles éléctrodes",
-
         #Electrodes pédiatriques (à faire)
-
         "Numéro de série ELECTRODES PEDIATRIQUES",
         "Numéro de série ELECTRODES PEDIATRIQUES relevé",
         "Date de péremption ELECTRODES PEDIATRIQUES",
@@ -59,16 +64,15 @@ def extract_rvd_data(text: str) -> Dict[str, str]:
     ]
     results = {}
     lines = text.splitlines()
-
     for keyword in keywords:
         value = "Non trouvé"
         if any(x in keyword.lower() for x in ["n° série", "numéro de série"]):
             pattern = re.compile(re.escape(keyword) + r"[\s:]*([A-Za-z0-9\-]+)(?=\s|$)", re.IGNORECASE)
-        elif keyword == "Code site":
+        elif keyword.lower() == "code site":
             pattern = re.compile(r"Code site\s+([A-Z0-9]+)", re.IGNORECASE)
         else:
             pattern = re.compile(re.escape(keyword) + r"[\s:]*([^\n]*)")
-
+        
         for i, line in enumerate(lines):
             stripped_line = line.strip()
             if stripped_line.lower().startswith(keyword.lower()):
@@ -78,22 +82,24 @@ def extract_rvd_data(text: str) -> Dict[str, str]:
                     if any(x in keyword.lower() for x in ["n° série", "numéro de série"]):
                         value = value.split()[0]
                 else:
-                    value = _get_next_valid_line(lines, i, keyword)
+                    value = get_next_valid_line(lines, i, keyword)
                 break
-            if keyword == "Code site":
+            
+            if keyword.lower() == "code site":
                 match = pattern.search(stripped_line)
                 if match:
                     value = match.group(1)
                     break
-
+                    
         if value != "Non trouvé":
             value = re.sub(r'\s*(?:Vérification|Validation).*$', '', value)
             if "date" in keyword.lower() and re.search(r'\d{2}[/-]\d{2}[/-]\d{4}', value):
                 value = re.search(r'\d{2}[/-]\d{2}[/-]\d{4}(?:\s+\d{2}:\d{2})?', value).group(0)
             elif "%" in keyword:
                 value = re.sub(r'[^\d.]', '', value)
-
+        
         results[keyword] = value
+    
     return results
 
 def _get_next_valid_line(lines: List[str], start_idx: int, keyword: str) -> str:
