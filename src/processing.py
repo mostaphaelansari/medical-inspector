@@ -3,7 +3,7 @@
 import logging
 import os
 import tempfile
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pdfplumber
@@ -37,9 +37,9 @@ def fix_orientation(img: Image.Image) -> Image.Image:
             degrees = rotation_map.get(exif.get(orientation))
             if degrees:
                 img = img.rotate(degrees, expand=True)
-                logger.debug(f"Rotated image by {degrees} degrees")
+                logger.debug("Rotated image by %s degrees", degrees)
     except (AttributeError, KeyError, OSError) as e:
-        logger.warning(f"Could not process EXIF orientation: {e}")
+        logger.warning("Could not process EXIF orientation: %s", e)
     
     return img
 
@@ -68,6 +68,7 @@ def classify_image(client, image_path: str) -> Dict:
     Returns:
         Classification results.
     """
+    # Import here to avoid circular imports
     from .config import MODEL_ID
     return client.infer(image_path, model_id=MODEL_ID)
 
@@ -88,9 +89,190 @@ def extract_text_from_pdf(uploaded_file) -> str:
                 page_text = page.extract_text() or ""
                 text += page_text
     except Exception as e:
-        logger.error(f"PDF text extraction failed: {e}")
+        logger.error("PDF text extraction failed: %s", e)
     
     return text
+
+
+def process_pdf_file(
+    uploaded_file, 
+    error_container
+) -> None:
+    """Process a PDF file based on its type.
+    
+    Args:
+        uploaded_file: The PDF file to process
+        error_container: Streamlit container for errors
+    """
+    text = extract_text_from_pdf(uploaded_file)
+    filename_lower = uploaded_file.name.lower()
+    
+    # Process RVD documents
+    if is_rvd_document(uploaded_file.name, text):
+        try:
+            # Import here to avoid circular imports
+            from .extraction import extract_rvd_data
+            st.session_state.processed_data['RVD'] = extract_rvd_data(text)
+            st.success(f"RVD traité : {uploaded_file.name}")
+        except Exception as e:
+            error_container.error(f"Erreur lors du traitement RVD : {uploaded_file.name} - {e}")
+            logger.error("RVD processing error: %s", e)
+            
+    # Process AED documents
+    elif 'aed' in filename_lower:
+        try:
+            # Import here to avoid circular imports
+            from .extraction import extract_aed_g5_data, extract_aed_g3_data
+            aed_type = st.session_state.dae_type
+            
+            if aed_type == "G5":
+                st.session_state.processed_data['AEDG5'] = extract_aed_g5_data(text)
+            else:
+                st.session_state.processed_data['AEDG3'] = extract_aed_g3_data(text)
+                
+            st.success(f"Rapport AED {aed_type} traité : {uploaded_file.name}")
+        except Exception as e:
+            error_container.error(f"Erreur lors du traitement AED : {uploaded_file.name} - {e}")
+            logger.error("AED processing error: %s", e)
+            
+    # Unrecognized PDF type
+    else:
+        st.warning(f"Type de PDF non reconnu : {uploaded_file.name}")
+
+
+def process_image_file(
+    uploaded_file, 
+    error_container, 
+    client, 
+    reader
+) -> None:
+    """Process an image file.
+    
+    Args:
+        uploaded_file: The image file to process
+        error_container: Streamlit container for errors
+        client: ML client for classification
+        reader: OCR reader
+    """
+    temp_file_path = None
+    image = None
+    
+    try:
+        # Open and preprocess image
+        image = Image.open(uploaded_file)
+        image = fix_orientation(image)
+        image = image.convert('RGB')
+        
+        # Save to temporary file for classification
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
+            image.save(temp_file, format='JPEG')
+            temp_file_path = temp_file.name
+        
+        # Import extraction functions (here to avoid circular imports)
+        from .extraction import (
+            extract_important_info_g3, extract_important_info_g5,
+            extract_important_info_batterie, extract_important_info_electrodes
+        )
+        
+        # Classify image
+        result = classify_image(client, temp_file_path)
+        detected_classes = [
+            pred['class'] for pred in result.get('predictions', [])
+            if pred['confidence'] > 0.5
+        ]
+        
+        # Process based on classification
+        process_classified_image(image, detected_classes, reader, uploaded_file, 
+                                 extract_important_info_g3, extract_important_info_g5,
+                                 extract_important_info_batterie, extract_important_info_electrodes)
+                
+    except ValueError as e:
+        logger.warning("Value error processing %s: %s", uploaded_file.name, e)
+        error_container.error(
+            f"Erreur de valeur lors de la classification de {uploaded_file.name} : {e}"
+        )
+        # Append image even on error, with an error type
+        add_error_image(image, 'Erreur de classification')
+    
+    except Exception as e:
+        logger.error("Unexpected error processing %s: %s", uploaded_file.name, e, exc_info=True)
+        error_container.error(
+            f"Erreur inattendue lors du traitement de {uploaded_file.name} : {e}"
+        )
+        # Append image even on unexpected errors
+        add_error_image(image, 'Erreur de traitement')
+    
+    finally:
+        # Clean up temp file
+        if temp_file_path and os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+
+
+def process_classified_image(
+    image, detected_classes, reader, uploaded_file,
+    extract_important_info_g3, extract_important_info_g5,
+    extract_important_info_batterie, extract_important_info_electrodes
+):
+    """Process an image based on its classification.
+    
+    Args:
+        image: The image to process
+        detected_classes: List of detected classes
+        reader: OCR reader
+        uploaded_file: The original uploaded file
+        extract_*: Various extraction functions
+    """
+    # Create img_data with default values
+    img_data = {
+        'type': detected_classes[0] if detected_classes else 'Non classifié',
+        'serial': None,
+        'date': None,
+        'image': image
+    }
+    
+    # Process further if classified
+    if detected_classes:
+        if "Defibrillateur" in detected_classes[0]:
+            results = process_ocr(reader, image)
+            if "G3" in detected_classes[0]:
+                img_data['serial'], img_data['date'] = extract_important_info_g3(results)
+            else:
+                img_data['serial'], img_data['date'] = extract_important_info_g5(results)
+        elif "Batterie" in detected_classes[0]:
+            results = process_ocr(reader, image)
+            img_data['serial'], img_data['date'] = extract_important_info_batterie(results)
+        elif "Electrodes" in detected_classes[0]:
+            img_data['serial'], img_data['date'] = extract_important_info_electrodes(image)
+        st.success(f"Image {detected_classes[0]} traitée : {uploaded_file.name}")
+    else:
+        st.warning(f"Aucune classification trouvée pour : {uploaded_file.name}")
+    
+    # Add the image data to session state
+    st.session_state.processed_data['images'].append(img_data)
+
+
+def add_error_image(image, error_type):
+    """Add an image with error information to the session state.
+    
+    Args:
+        image: The image that caused the error
+        error_type: Type of error that occurred
+    """
+    img_data = {
+        'type': error_type,
+        'serial': None,
+        'date': None,
+        'image': image if image is not None else None
+    }
+    st.session_state.processed_data['images'].append(img_data)
+
+
+def initialize_session_data():
+    """Initialize session state data structures if they don't exist."""
+    if 'processed_data' not in st.session_state:
+        st.session_state.processed_data = {'images': []}
+    elif 'images' not in st.session_state.processed_data:
+        st.session_state.processed_data['images'] = []
 
 
 def process_uploaded_file(
@@ -115,11 +297,8 @@ def process_uploaded_file(
         client: ML client for classification
         reader: OCR reader
     """
-    # Initialize data structures if they don't exist
-    if 'processed_data' not in st.session_state:
-        st.session_state.processed_data = {'images': []}
-    elif 'images' not in st.session_state.processed_data:
-        st.session_state.processed_data['images'] = []
+    # Initialize data structures
+    initialize_session_data()
     
     # Update progress
     progress = (i + 1) / total_files
@@ -135,127 +314,14 @@ def process_uploaded_file(
         unsafe_allow_html=True
     )
 
-    # Process PDF files
+    # Process file based on type
     if uploaded_file.type == "application/pdf":
-        text = extract_text_from_pdf(uploaded_file)
-        
-        # Process RVD documents
-        if 'rapport de vérification' in uploaded_file.name.lower():
-            try:
-                from .extraction import extract_rvd_data
-                st.session_state.processed_data['RVD'] = extract_rvd_data(text)
-                st.success(f"RVD traité : {uploaded_file.name}")
-            except Exception as e:
-                error_container.error(f"Erreur lors du traitement RVD : {uploaded_file.name} - {e}")
-                logger.error(f"RVD processing error: {e}")
-                
-        # Process AED documents
-        elif 'aed' in uploaded_file.name.lower():
-            try:
-                from .extraction import extract_aed_g5_data, extract_aed_g3_data
-                if st.session_state.dae_type == "G5":
-                    st.session_state.processed_data['AEDG5'] = extract_aed_g5_data(text)
-                else:
-                    st.session_state.processed_data['AEDG3'] = extract_aed_g3_data(text)
-                st.success(f"Rapport AED {st.session_state.dae_type} traité : {uploaded_file.name}")
-            except Exception as e:
-                error_container.error(f"Erreur lors du traitement AED : {uploaded_file.name} - {e}")
-                logger.error(f"AED processing error: {e}")
-                
-        # Unrecognized PDF type
-        else:
-            st.warning(f"Type de PDF non reconnu : {uploaded_file.name}")
-            
-    # Process image files
+        process_pdf_file(uploaded_file, error_container)
     else:
-        temp_file_path = None
-        try:
-            # Open and preprocess image
-            image = Image.open(uploaded_file)
-            image = fix_orientation(image)
-            image = image.convert('RGB')
-            
-            # Save to temporary file for classification
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
-                image.save(temp_file, format='JPEG')
-                temp_file_path = temp_file.name
-            
-            # Import extraction functions
-            from .extraction import (
-                extract_important_info_g3, extract_important_info_g5,
-                extract_important_info_batterie, extract_important_info_electrodes
-            )
-            
-            # Classify image
-            result = classify_image(client, temp_file_path)
-            detected_classes = [
-                pred['class'] for pred in result.get('predictions', [])
-                if pred['confidence'] > 0.5
-            ]
-            
-            # Always create img_data, even if no classification
-            img_data = {
-                'type': detected_classes[0] if detected_classes else 'Non classifié',
-                'serial': None,
-                'date': None,
-                'image': image
-            }
-            
-            # Process further if classified
-            if detected_classes:
-                if "Defibrillateur" in detected_classes[0]:
-                    results = process_ocr(reader, image)
-                    if "G3" in detected_classes[0]:
-                        img_data['serial'], img_data['date'] = extract_important_info_g3(results)
-                    else:
-                        img_data['serial'], img_data['date'] = extract_important_info_g5(results)
-                elif "Batterie" in detected_classes[0]:
-                    results = process_ocr(reader, image)
-                    img_data['serial'], img_data['date'] = extract_important_info_batterie(results)
-                elif "Electrodes" in detected_classes[0]:
-                    img_data['serial'], img_data['date'] = extract_important_info_electrodes(image)
-                st.success(f"Image {detected_classes[0]} traitée : {uploaded_file.name}")
-            else:
-                st.warning(f"Aucune classification trouvée pour : {uploaded_file.name}")
-            
-            # Always append the image data, classified or not
-            st.session_state.processed_data['images'].append(img_data)
-        
-        except ValueError as e:
-            logger.warning(f"Value error processing {uploaded_file.name}: {e}")
-            error_container.error(
-                f"Erreur de valeur lors de la classification de {uploaded_file.name} : {e}"
-            )
-            # Append image even on error, with an error type
-            img_data = {
-                'type': 'Erreur de classification',
-                'serial': None,
-                'date': None,
-                'image': image if 'image' in locals() else None
-            }
-            st.session_state.processed_data['images'].append(img_data)
-        
-        except Exception as e:
-            logger.error(f"Unexpected error processing {uploaded_file.name}: {e}", exc_info=True)
-            error_container.error(
-                f"Erreur inattendue lors du traitement de {uploaded_file.name} : {e}"
-            )
-            # Append image even on unexpected errors
-            img_data = {
-                'type': 'Erreur de traitement',
-                'serial': None,
-                'date': None,
-                'image': image if 'image' in locals() else None
-            }
-            st.session_state.processed_data['images'].append(img_data)
-        
-        finally:
-            # Clean up temp file
-            if temp_file_path and os.path.exists(temp_file_path):
-                os.unlink(temp_file_path)
+        process_image_file(uploaded_file, error_container, client, reader)
 
 
-# Additional utility functions that enhance the codebase
+# Additional utility functions
 
 def preprocess_image_for_ocr(image: Image.Image) -> Image.Image:
     """Preprocess image to improve OCR results.
@@ -320,7 +386,8 @@ def get_aed_type(filename: str, text: str) -> Optional[str]:
     
     if 'g5' in filename_lower or 'g5' in text_lower:
         return "G5"
-    elif 'g3' in filename_lower or 'g3' in text_lower:
+    
+    if 'g3' in filename_lower or 'g3' in text_lower:
         return "G3"
     
     return None
