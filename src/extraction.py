@@ -17,28 +17,45 @@ def extract_rvd_data(text: str) -> Dict[str, str]:
     """
     keywords = [
         "Commentaire fin d'intervention et recommandations",
-        "Numéro de série DEFIBRILLATEUR",
         "Date-Heure rapport vérification défibrillateur",
-        "Changement batterie",
-        "Changement électrodes adultes",
-        "Code site",
+        "Code Site",
+        #Défibrillateur
+        "Numéro de série DEFIBRILLATEUR",
+        "Numéro de série relevé",
+        "Date fabrication relevée",
+        "Date fabrication DEFIBRILLATEUR",
+        
+        #Batterie
+
         "Numéro de série Batterie",
+        "Numéro de série relevé 2",
+        "Date fabrication BATTERIE",
+        "Date fabrication BATTERIE relevée",
         "Date mise en service BATTERIE",
+        "Date mise en service BATTERIE relevée",
         "Niveau de charge de la batterie en %",
+        "Changement batterie",
         "N° série nouvelle batterie",
         "Date mise en service",
+        "Date fabrication nouvelle batterie",
         "Niveau de charge nouvelle batterie",
+
+        #Electrodes Adultes
+
         "Numéro de série ELECTRODES ADULTES",
         "Numéro de série ELECTRODES ADULTES relevé",
-        "Numéro de série relevé 2",
-        "Date fabrication DEFIBRILLATEUR",
-        "Date fabrication BATTERIE",
-        "Date fabrication relevée",
-        "Date fabrication nouvelle batterie",
         "Date de péremption ELECTRODES ADULTES",
         "Date de péremption ELECTRODES ADULTES relevée",
+        "Changement électrodes adultes", 
         "N° série nouvelles électrodes",
         "Date péremption des nouvelles éléctrodes",
+
+        #Electrodes pédiatriques (à faire)
+
+        "Numéro de série ELECTRODES PEDIATRIQUES",
+        "Numéro de série ELECTRODES PEDIATRIQUES relevé",
+        "Date de péremption ELECTRODES PEDIATRIQUES",
+        "Date de péremption ELECTRODES PEDIATRIQUES relevée",
     ]
     results = {}
     lines = text.splitlines()

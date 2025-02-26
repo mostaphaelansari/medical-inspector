@@ -3,8 +3,9 @@
 import os
 import tempfile
 import numpy as np
+from typing import Dict, List, Tuple
 from PIL import Image, ImageEnhance, ImageFilter, ExifTags
-from typing import Dict, List, Tuple, Optional
+
 import pdfplumber
 import streamlit as st
 
