@@ -117,7 +117,7 @@ def process_uploaded_file(uploaded_file, progress_bar, status_text, error_contai
             result = classify_image(client, temp_file_path)
             detected_classes = [
                 pred['class'] for pred in result.get('predictions', [])
-                if pred['confidence'] > 0.3
+                if pred['confidence'] > 0.5
             ]
             
             # Always create img_data, even if no classification
