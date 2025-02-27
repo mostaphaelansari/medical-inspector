@@ -4,12 +4,13 @@ import logging
 import os
 import tempfile
 from typing import Dict, List, Optional, Tuple
-
+import io
 import numpy as np
 import pdfplumber
 import streamlit as st
 from PIL import Image, ImageEnhance, ImageFilter, ExifTags
-
+from .config import MODEL_ID
+from .extraction import extract_rvd_data
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ def classify_image(client, image_path: str) -> Dict:
         Classification results.
     """
     # Import here to avoid circular imports
-    from .config import MODEL_ID
+    
     return client.infer(image_path, model_id=MODEL_ID)
 
 
@@ -77,21 +78,26 @@ def extract_text_from_pdf(uploaded_file) -> str:
     """Extract text from a PDF file.
 
     Args:
-        uploaded_file: The uploaded PDF file.
+        uploaded_file: The uploaded PDF file (Streamlit UploadedFile).
 
     Returns:
         Extracted text from the PDF.
     """
     text = ""
     try:
-        with pdfplumber.open(uploaded_file) as pdf:
+        # Read bytes from the uploaded file
+        file_bytes = uploaded_file.read()
+        file_like_object = io.BytesIO(file_bytes)
+        
+        with pdfplumber.open(file_like_object) as pdf:
             for page in pdf.pages:
                 page_text = page.extract_text() or ""
-                text += page_text
+                text += page_text + "\n"
     except Exception as e:
         logger.error("PDF text extraction failed: %s", e)
     
     return text
+
 
 
 def process_pdf_file(
@@ -111,7 +117,7 @@ def process_pdf_file(
     if is_rvd_document(uploaded_file.name, text):
         try:
             # Import here to avoid circular imports
-            from .extraction import extract_rvd_data
+            
             st.session_state.processed_data['RVD'] = extract_rvd_data(text)
             st.success(f"RVD traité : {uploaded_file.name}")
         except Exception as e:
