@@ -3,6 +3,7 @@
 import json
 import os
 from datetime import datetime
+from tkinter import Tk, filedialog
 import zipfile
 from typing import Dict, Any
 import streamlit as st
@@ -197,6 +198,18 @@ def display_section_comparison(title: str, section_data: Dict[str, Dict]) -> Non
         else:
             st.error(f"❌ Seulement {successful_matches} correspondances sur {total_comparisons} vérifications")
 
+
+# Helper function to open file dialog
+def save_file_dialog(default_name):
+    root = Tk()
+    root.withdraw()  # Hide the root window
+    root.wm_attributes('-topmost', 1)  # Keep the dialog on top
+    file_path = filedialog.asksaveasfilename(
+                    defaultextension=".pdf",
+                    initialfile=default_name,
+                    filetypes=[("PDF Files", "*.pdf"), ("Image Files", "*.png *.jpg *.jpeg")]
+                )
+    return file_path
 def display_all_comparisons() -> None:
     """Display all comparison results with an overview summary."""
     if 'comparisons' not in st.session_state.processed_data:
@@ -517,141 +530,78 @@ def render_ui(client, reader):
                 
                 st.error(f"Échec de validation pour : {', '.join(failed)}")
 
+            
+
     with tab4:
         st.title("📤 Export automatisé")
         with st.container():
             col_config, col_preview = st.columns([1, 2])
+            
             with col_config:
                 with st.form("export_config"):
                     st.markdown("#### ⚙️ Paramètres d'export")
-                    export_format = st.selectbox(
-                        "Format de sortie",
-                        ["ZIP", "PDF", "CSV", "XLSX"],
-                        index=0
-                    )
                     include_images = st.checkbox("Inclure les images", True)
                     st.markdown("---")
-                    with st.expander("Exportation des fichiers", expanded=True):
-                        if st.form_submit_button("Générer un package d'export"):
-                            if not st.session_state.processed_data.get('RVD'):
-                                st.warning("Aucune donnée RVD disponible pour le nommage")
-                            else:
-                                code_site = st.session_state.processed_data['RVD'].get('Code site', 'INCONNU')
-                                date_str = datetime.now().strftime("%Y%m%d")
-                                with zipfile.ZipFile('export.zip', 'w', zipfile.ZIP_DEFLATED) as zipf:
-                                    zipf.writestr(
-                                        'donnees_traitees.json',
-                                        json.dumps(st.session_state.processed_data, indent=2)
-                                    )
-                                    
-                                    # Build summary with the new section-based structure
-                                    summary = (
-                                        "Résumé de l'inspection\n\n"
-                                        "Données RVD:\n" +
-                                        json.dumps(st.session_state.processed_data['RVD'], indent=2) +
-                                        "\n\n" +
-                                        f"Données AED {st.session_state.dae_type}:\n" +
-                                        json.dumps(st.session_state.processed_data[f'AEDG{st.session_state.dae_type[-1]}'], indent=2) +
-                                        "\n\nComparaisons par section:\n"
-                                    )
-                                    
-                                    # Add section-based comparisons
-                                    for section_name, section_data in st.session_state.processed_data['comparisons'].items():
-                                        summary += f"\n{section_name.upper()}:\n"
+                    
+                    if st.form_submit_button("Générer un package d'export"):
+                        if not st.session_state.get('processed_data', {}).get('RVD'):
+                            st.warning("Aucune donnée RVD disponible pour le nommage")
+                            st.stop()
+
+                        try:
+                            code_site = st.session_state.processed_data['RVD'].get('Code site', 'INCONNU')
+                            date_str = datetime.now().strftime("%Y%m%d")
+                            
+                            # Process PDF files
+                            if 'uploaded_files' in st.session_state:
+                                for file in st.session_state.uploaded_files:
+                                    if file.type == "application/pdf":
+                                        # Generate default name
+                                        if 'rapport de vérification' in file.name.lower():
+                                            default_name = f"RVD_{code_site}_{date_str}.pdf"
+                                        else:
+                                            default_name = f"AED_{st.session_state.dae_type}_{code_site}_{date_str}.pdf"
                                         
-                                        for field, data in section_data.items():
-                                            if isinstance(data, dict):
-                                                if 'match' in data:
-                                                    summary += (
-                                                        f"  {field.replace('_', ' ').title()}: "
-                                                        f"{'✅' if data.get('match', False) else '❌'}\n"
-                                                    )
-                                                elif 'match_rvd_aed' in data:
-                                                    summary += (
-                                                        f"  {field.replace('_', ' ').title()} (RVD vs AED): "
-                                                        f"{'✅' if data.get('match_rvd_aed', False) else '❌'}\n"
-                                                    )
-                                                    if 'match_rvd_image' in data:
-                                                        summary += (
-                                                            f"  {field.replace('_', ' ').title()} (RVD vs Image): "
-                                                            f"{'✅' if data.get('match_rvd_image', False) else '❌'}\n"
-                                                        )
-                                                elif field in ['adultes', 'pediatriques']:
-                                                    summary += f"  {field.title()}:\n"
-                                                    for subfield, subdata in data.items():
-                                                        if 'match' in subdata:
-                                                            summary += (
-                                                                f"    {subfield.replace('_', ' ').title()}: "
-                                                                f"{'✅' if subdata.get('match', False) else '❌'}\n"
-                                                            )
+                                        # Open save dialog
+                                        save_path = save_file_dialog(default_name)
+                                        
+                                        if save_path:  # If user didn't cancel
+                                            with open(save_path, "wb") as f:
+                                                f.write(file.getvalue())
+                                            st.success(f"Fichier enregistré : {os.path.basename(save_path)}")
                                     
-                                    zipf.writestr("resume.txt", summary)
-                                    
-                                    if 'uploaded_files' in st.session_state:
-                                        for uploaded_file in st.session_state.uploaded_files:
-                                            if (
-                                                uploaded_file.type == "application/pdf" or
-                                                (include_images and uploaded_file.type.startswith("image/"))
-                                            ):
-                                                original_bytes = uploaded_file.getvalue()
-                                                if uploaded_file.type == "application/pdf":
-                                                    if 'rapport de vérification' in uploaded_file.name.lower():
-                                                        new_name = f"RVD_{code_site}_{date_str}.pdf"
-                                                    else:
-                                                        new_name = f"AED_{st.session_state.dae_type}_{code_site}_{date_str}.pdf"
-                                                else:
-                                                    new_name = f"IMAGE_{code_site}_{date_str}_{uploaded_file.name}"
-                                                zipf.writestr(new_name, original_bytes)
-                                
-                                st.session_state.export_ready = True
-                                if os.path.exists('export.zip'):
-                                    with open("export.zip", "rb") as f:
-                                        st.download_button(
-                                            label="Télécharger le package d'export",
-                                            data=f,
-                                            file_name=f"Inspection_{code_site}_{date_str}.zip",
-                                            mime="application/zip"
-                                        )
-            
+                                    # Process images if included
+                                    if include_images and file.type.startswith("image/"):
+                                        default_name = f"IMAGE_{code_site}_{date_str}_{file.name}"
+                                        save_path = save_file_dialog(default_name)
+                                        
+                                        if save_path:  # If user didn't cancel
+                                            with open(save_path, "wb") as f:
+                                                f.write(file.getvalue())
+                                            st.success(f"Image enregistrée : {os.path.basename(save_path)}")
+
+                        except Exception as e:
+                            st.error(f"Erreur lors de l'enregistrement : {str(e)}")
+
             with col_preview:
-                st.markdown("#### 👁️ Aperçu de l'export")
-                if st.session_state.get('export_ready'):
-                    st.success("✅ Package prêt pour téléchargement !")
-                    preview_data = {
-                        "format": export_format,
-                        "fichiers_inclus": [
-                            "donnees_traitees.json",
-                            "resume.txt",
-                            *(
-                                ["images.zip"]
-                                if include_images and any(
-                                    f.type.startswith("image/")
-                                    for f in st.session_state.get('uploaded_files', [])
-                                )
-                                else []
-                            )
-                        ],
-                        "taille_estimee": f"{(len(st.session_state.get('uploaded_files', []))*0.5):.1f} Mo"
-                    }
-                    st.json(preview_data)
-                    if os.path.exists('export.zip'):
-                        with open("export.zip", "rb") as f:
-                            if st.download_button(
-                                label="📥 Télécharger l'export complet",
-                                data=f,
-                                file_name=f"Inspection_{datetime.now().strftime('%Y%m%d')}.zip",
-                                mime="application/zip",
-                                help="Cliquez pour télécharger le package complet",
-                                use_container_width=True,
-                                type="primary"
-                            ):
-                                st.balloons()
+                st.markdown("#### 👁️ Aperçu des fichiers")
+                if 'uploaded_files' in st.session_state:
+                    file_list = []
+                    for file in st.session_state.uploaded_files:
+                        file_type = "PDF" if file.type == "application/pdf" else "Image"
+                        file_list.append({
+                            "Type": file_type,
+                            "Nom original": file.name,
+                            "Taille": f"{len(file.getvalue()) / 1024:.1f} KB"
+                        })
+                    
+                    if file_list:
+                        st.table(file_list)
+                    else:
+                        st.info("Aucun fichier disponible pour l'export")
                 else:
-                    st.markdown(
-                        """
-                        <div style="padding: 2rem; text-align: center; opacity: 0.5;">
-                            ⚠️ Aucun export généré
+                    st.markdown("""
+                        <div style="opacity:0.5; text-align:center; padding:2rem;">
+                            ⚠️ Aucun fichier uploadé
                         </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
+                    """, unsafe_allow_html=True)
