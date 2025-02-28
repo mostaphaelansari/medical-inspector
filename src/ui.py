@@ -10,8 +10,136 @@ from .config import ALLOWED_EXTENSIONS, CSS_STYLE
 from .processing import process_uploaded_file
 from .comparison import compare_data
 
+def display_comparison_row(left_label: str, left_value: str, right_label: str, 
+                          right_value: str, match_key: str, data: dict) -> None:
+    """Display a comparison row with two values and match indicator.
+    
+    Args:
+        left_label: Label for the left column
+        left_value: Value for the left column
+        right_label: Label for the right column
+        right_value: Value for the right column
+        match_key: Key to check in data for match status
+        data: The comparison data dict
+    """
+    cols = st.columns([3, 2, 2, 1])
+    cols[0].markdown("")
+    cols[1].markdown(f"*{left_label}:*  \n`{left_value}`")
+    cols[2].markdown(f"*{right_label}:*  \n`{right_value}`")
+    
+    # Handle different match key formats
+    match = data.get(match_key, False)
+    if match:
+        cols[3].success("✅")
+    else:
+        cols[3].error("❌")
+
+def display_field_data(field_name: str, data: dict, indent: int = 0) -> None:
+    """Display data for a specific field with all data sources in one line.
+    
+    Args:
+        field_name: Name of the field
+        data: Comparison data for the field
+        indent: Indentation level for nested fields
+    """
+    with st.container():
+        # Header with field name
+        indentation = "→ " * indent
+        display_name = field_name.replace('_', ' ').title()
+        st.markdown(f"**{indentation}{display_name}**")
+        
+        # Define data sources with labels and access keys
+        data_sources = {
+            "RVD Original": {'key': 'rvd_original', 'icon': '📄'},
+            "RVD Relevé": {'key': 'rvd_releve', 'icon': '📋'},
+            "AED": {'key': 'aed', 'icon': '🔌'},
+            "Image": {'key': 'image', 'icon': '📷'}
+        }
+        
+        # Extract values and count valid ones
+        values = {}
+        valid_values = 0
+        for label, source_info in data_sources.items():
+            value = data.get(source_info['key'], 'N/A')
+            values[label] = {'value': value, 'icon': source_info['icon']}
+            if value != 'N/A' and value is not None:
+                valid_values += 1
+        
+        if valid_values >= 2:
+            # Create a single row with all values
+            cols = st.columns([2, 2, 2, 2, 2])
+            
+            # Display field name with tooltip for technical details
+            cols[0].markdown(
+                f"<span title='Field technical name: {field_name}'>*Field:*  \n`{display_name}`</span>",
+                unsafe_allow_html=True
+            )
+            
+            # Display each value with its label and icon
+            for i, (label, info) in enumerate(values.items(), 1):
+                if i < len(cols):
+                    if info['value'] != 'N/A' and info['value'] is not None:
+                        cols[i].markdown(f"*{info['icon']} {label}:*  \n`{info['value']}`")
+                    else:
+                        cols[i].markdown(f"*{info['icon']} {label}:*  \n`-`")
+            
+            # Calculate and display match status with improved visuals
+            match_keys = [k for k in data.keys() if k.startswith('match_')]
+            matches = sum(1 for k in match_keys if data.get(k, False))
+            
+            # Only display if there are match keys
+            if match_keys:
+                match_percentage = (matches / len(match_keys)) * 100
+                
+                # Create color gradient based on match percentage
+                color = get_match_color(match_percentage)
+                
+                status_text = f"Match: {matches}/{len(match_keys)} ({match_percentage:.0f}%)"
+                
+                # Use a progress bar to show match percentage
+                st.progress(match_percentage / 100)
+                
+                # Add a status indicator with appropriate styling
+                if matches == len(match_keys):
+                    st.success(f"✅ {status_text}")
+                elif match_percentage >= 50:
+                    st.warning(f"⚠️ {status_text}")
+                else:
+                    st.error(f"❌ {status_text}")
+        
+        # Display errors with more detailed formatting
+        if 'errors' in data and data['errors']:
+            with st.expander("⚠️ Erreurs détectées", expanded=True):
+                for err in data['errors']:
+                    st.error(f"• {err}")
+        
+        if 'error' in data and data['error']:
+            st.error(f"🚫 Erreur critique: {data['error']}")
+
+def get_match_color(percentage: float) -> str:
+    """Generate a color on a gradient from red to green based on percentage.
+    
+    Args:
+        percentage: Match percentage (0-100)
+        
+    Returns:
+        Hex color code
+    """
+    if percentage <= 50:
+        # Red to yellow gradient for 0-50%
+        r = 255
+        g = int((percentage / 50) * 255)
+        b = 0
+    else:
+        # Yellow to green gradient for 50-100%
+        r = int(255 - ((percentage - 50) / 50) * 255)
+        g = 255
+        b = 0
+    
+    return f"#{r:02x}{g:02x}{b:02x}"
+
 def display_section_comparison(title: str, section_data: Dict[str, Dict]) -> None:
-    """Display comparison results for a specific equipment section.
+    """Display comparison results for a specific equipment section with relevé data.
 
     Args:
         title: Title of the section.
@@ -21,88 +149,133 @@ def display_section_comparison(title: str, section_data: Dict[str, Dict]) -> Non
         return
     
     st.subheader(title)
+    st.markdown("---")
+    
+    # Calculate overall match status for the section
+    total_comparisons = 0
+    successful_matches = 0
     
     for field, data in section_data.items():
-        if isinstance(data, dict) and 'match_rvd_aed' in data:
-            # Field has both RVD and AED comparison
-            with st.container():
-                cols = st.columns([3, 2, 2, 1])
-                cols[0].markdown(f"**{field.replace('_', ' ').title()}**")
-                cols[1].markdown(f"*RVD:*  \n`{data.get('rvd', 'N/A')}`")
-                cols[2].markdown(f"*AED:*  \n`{data.get('aed', 'N/A')}`")
-                if data.get('match_rvd_aed', False):
-                    cols[3].success("✅")
-                else:
-                    cols[3].error("❌")
+        if isinstance(data, dict):
+            # Check if it's a nested structure (like electrodes)
+            if field in ['adultes', 'pediatriques']:
+                if data:  # Only display if there's data
+                    st.markdown(f"### {field.title()}")
+                    for subfield, subdata in data.items():
+                        display_field_data(subfield, subdata, indent=1)
+                        
+                        # Count matches for statistics
+                        match_keys = [k for k in subdata.keys() if k.startswith('match_')]
+                        total_comparisons += len(match_keys)
+                        successful_matches += sum(1 for k in match_keys if subdata.get(k, False))
+                        
+                        st.markdown("---")
+            else:
+                display_field_data(field, data)
                 
-                # If there's also image data
-                if 'image' in data:
-                    cols = st.columns([3, 2, 2, 1])
-                    cols[0].markdown("")
-                    cols[1].markdown(f"*RVD:*  \n`{data.get('rvd', 'N/A')}`")
-                    cols[2].markdown(f"*Image:*  \n`{data.get('image', 'N/A')}`")
-                    if data.get('match_rvd_image', False):
-                        cols[3].success("✅")
-                    else:
-                        cols[3].error("❌")
+                # Count matches for statistics
+                match_keys = [k for k in data.keys() if k.startswith('match_')]
+                total_comparisons += len(match_keys)
+                successful_matches += sum(1 for k in match_keys if data.get(k, False))
                 
-        elif isinstance(data, dict) and ('match' in data):
-            # Regular comparison field (RVD vs Image or RVD vs AED)
-            with st.container():
-                cols = st.columns([3, 2, 2, 1])
-                cols[0].markdown(f"**{field.replace('_', ' ').title()}**")
-                cols[1].markdown(f"*RVD:*  \n`{data.get('rvd', 'N/A')}`")
-                
-                # Determine the comparison type
-                if 'aed' in data:
-                    compare_type = 'AED'
-                    compare_value = data.get('aed', 'N/A')
-                else:
-                    compare_type = 'Image'
-                    compare_value = data.get('image', 'N/A')
-                
-                cols[2].markdown(f"*{compare_type}:*  \n`{compare_value}`")
-                
-                if data.get('match', False):
-                    cols[3].success("✅")
-                else:
-                    cols[3].error("❌")
-                
-                if 'errors' in data:
-                    for err in data['errors']:
-                        st.error(err)
-                if 'error' in data:
-                    st.error(data['error'])
-                
-        elif field == 'adultes' or field == 'pediatriques':
-            # Nested subsection (for electrodes)
-            st.markdown(f"**{field.title()}:**")
-            for subfield, subdata in data.items():
-                with st.container():
-                    cols = st.columns([3, 2, 2, 1])
-                    cols[0].markdown(f"→ {subfield.replace('_', ' ').title()}")
-                    cols[1].markdown(f"*RVD:*  \n`{subdata.get('rvd', 'N/A')}`")
-                    
-                    # Determine the comparison type for nested field
-                    if 'aed' in subdata:
-                        compare_type = 'AED'
-                        compare_value = subdata.get('aed', 'N/A')
-                    else:
-                        compare_type = 'Image'
-                        compare_value = subdata.get('image', 'N/A')
-                    
-                    cols[2].markdown(f"*{compare_type}:*  \n`{compare_value}`")
-                    
-                    if subdata.get('match', False):
-                        cols[3].success("✅")
-                    else:
-                        cols[3].error("❌")
-                    
-                    if 'errors' in subdata:
-                        for err in subdata['errors']:
-                            st.error(err)
+                st.markdown("---")
+    
+    # Display overall status
+    if total_comparisons > 0:
+        match_percentage = (successful_matches / total_comparisons) * 100
+        st.metric(
+            label=f"Correspondance globale pour {title}", 
+            value=f"{match_percentage:.1f}%",
+            delta=None
+        )
         
-        st.markdown("---")
+        # Color-coded status message
+        if match_percentage == 100:
+            st.success("✅ Toutes les données correspondent parfaitement!")
+        elif match_percentage >= 75:
+            st.warning(f"⚠️ {successful_matches} correspondances sur {total_comparisons} vérifications")
+        else:
+            st.error(f"❌ Seulement {successful_matches} correspondances sur {total_comparisons} vérifications")
+
+def display_all_comparisons() -> None:
+    """Display all comparison results with an overview summary."""
+    if 'comparisons' not in st.session_state.processed_data:
+        st.warning("Aucune comparaison disponible. Veuillez d'abord exécuter la comparaison des données.")
+        return
+    
+    comparisons = st.session_state.processed_data['comparisons']
+    
+    # Overview section
+    st.header("Résumé des Comparaisons")
+    
+    # Create metrics for overall statistics
+    total_all = 0
+    matches_all = 0
+    section_stats = {}
+    
+    for section, data in comparisons.items():
+        section_matches = 0
+        section_total = 0
+        
+        # Function to process each data dict and count matches
+        def count_matches(data_dict):
+            matches = 0
+            total = 0
+            for k, v in data_dict.items():
+                if k.startswith('match_') and isinstance(v, bool):
+                    total += 1
+                    if v:
+                        matches += 1
+            return matches, total
+        
+        # Process regular fields
+        for field, field_data in data.items():
+            if isinstance(field_data, dict):
+                if field in ['adultes', 'pediatriques']:
+                    # Process nested electrodes data
+                    for _, subdata in field_data.items():
+                        m, t = count_matches(subdata)
+                        section_matches += m
+                        section_total += t
+                else:
+                    # Process regular field data
+                    m, t = count_matches(field_data)
+                    section_matches += m
+                    section_total += t
+        
+        # Store statistics for this section
+        if section_total > 0:
+            section_stats[section] = {
+                'matches': section_matches,
+                'total': section_total,
+                'percentage': (section_matches / section_total * 100) if section_total > 0 else 0
+            }
+            total_all += section_total
+            matches_all += section_matches
+    
+    # Display overall metrics
+    cols = st.columns(len(section_stats) + 1)
+    
+    # Overall percentage
+    overall_percentage = (matches_all / total_all * 100) if total_all > 0 else 0
+    cols[0].metric(
+        label="Correspondance Globale",
+        value=f"{overall_percentage:.1f}%",
+        delta=None
+    )
+    
+    # Section percentages
+    for i, (section, stats) in enumerate(section_stats.items(), 1):
+        if i < len(cols):
+            cols[i].metric(
+                label=f"{section.title()}",
+                value=f"{stats['percentage']:.1f}%",
+                delta=f"{stats['matches']}/{stats['total']} correspondances"
+            )
+    
+    # Detailed sections
+    st.markdown("## Détails des comparaisons")
+    
 
 def setup_session_state():
     """Initialiser les variables d'état de session."""
