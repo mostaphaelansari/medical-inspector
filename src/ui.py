@@ -5,120 +5,323 @@ import os
 from datetime import datetime
 from tkinter import Tk, filedialog
 import zipfile
+import pandas as pd
+import altair as alt
 from typing import Dict, Any
 import streamlit as st
 from .config import ALLOWED_EXTENSIONS, CSS_STYLE
 from .processing import process_uploaded_file
 from .comparison import compare_data
 
-def display_comparison_row(left_label: str, left_value: str, right_label: str, 
-                          right_value: str, match_key: str, data: dict) -> None:
-    """Display a comparison row with two values and match indicator.
+
+def display_comparison_dashboard(data: Dict[str, Dict]) -> None:
+    """
+    Display a comprehensive, visually-appealing comparison dashboard.
     
     Args:
-        left_label: Label for the left column
-        left_value: Value for the left column
-        right_label: Label for the right column
-        right_value: Value for the right column
-        match_key: Key to check in data for match status
-        data: The comparison data dict
+        data: The complete comparison data structure
     """
-    cols = st.columns([3, 2, 2, 1])
-    cols[0].markdown("")
-    cols[1].markdown(f"*{left_label}:*  \n`{left_value}`")
-    cols[2].markdown(f"*{right_label}:*  \n`{right_value}`")
+    # Apply custom CSS for better styling
+    st.markdown("""
+    <style>
+    .comparison-card {
+        border-radius: 5px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .field-label {
+        font-weight: 600;
+        color: #555;
+    }
+    .match-indicator {
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    .data-value {
+        font-family: monospace;
+        background-color: #f5f5f5;
+        padding: 0.2rem 0.4rem;
+        border-radius: 3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+        display: inline-block;
+    }
+    .st-emotion-cache-z5fcl4 {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
-    # Handle different match key formats
-    match = data.get(match_key, False)
-    if match:
-        cols[3].success("✅")
-    else:
-        cols[3].error("❌")
+    # Create summary metrics at the top
+    if data:
+        create_summary_metrics(data)
+    
+    # Display each section with improved visuals
+    for section_name, section_data in data.items():
+        if section_data:
+            display_section_card(section_name, section_data)
 
-def display_field_data(field_name: str, data: dict, indent: int = 0) -> None:
-    """Display data for a specific field with all data sources in one line.
+def create_summary_metrics(data: Dict[str, Dict]) -> None:
+    """
+    Create summary metrics and visualizations for the overall comparison.
+    
+    Args:
+        data: The complete comparison data
+    """
+    # Calculate overall statistics
+    total_fields = 0
+    total_comparisons = 0
+    successful_matches = 0
+    sections_data = []
+    
+    for section_name, section_data in data.items():
+        section_fields = 0
+        section_comparisons = 0
+        section_matches = 0
+        
+        for field, field_data in section_data.items():
+            if isinstance(field_data, dict):
+                if field in ['adultes', 'pediatriques']:
+                    # Handle nested structure
+                    for subfield, subdata in field_data.items():
+                        section_fields += 1
+                        match_keys = [k for k in subdata.keys() if k.startswith('match_')]
+                        section_comparisons += len(match_keys)
+                        section_matches += sum(1 for k in match_keys if subdata.get(k, False))
+                else:
+                    section_fields += 1
+                    match_keys = [k for k in field_data.keys() if k.startswith('match_')]
+                    section_comparisons += len(match_keys)
+                    section_matches += sum(1 for k in match_keys if field_data.get(k, False))
+        
+        total_fields += section_fields
+        total_comparisons += section_comparisons
+        successful_matches += section_matches
+        
+        if section_comparisons > 0:
+            match_percentage = (section_matches / section_comparisons) * 100
+            sections_data.append({
+                "section": section_name.replace('_', ' ').title(),
+                "percentage": round(match_percentage, 1)
+            })
+    
+    # Display metrics in a card
+    with st.container():
+        st.markdown("""
+        <div style="background-color: #f8f9fa; padding: 1.5rem; border-radius: 10px; 
+                   margin-bottom: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h2 style="margin-top: 0;">Rapport de Comparaison</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Summary metrics in columns
+        if total_comparisons > 0:
+            overall_percentage = (successful_matches / total_comparisons) * 100
+            
+            cols = st.columns(4)
+            cols[0].metric(
+                label="Champs Analysés",
+                value=total_fields
+            )
+            cols[1].metric(
+                label="Vérifications",
+                value=total_comparisons
+            )
+            cols[2].metric(
+                label="Correspondances",
+                value=successful_matches
+            )
+            cols[3].metric(
+                label="Taux de Correspondance",
+                value=f"{overall_percentage:.1f}%",
+                delta="objectif: 100%" if overall_percentage < 100 else None,
+                delta_color="inverse"
+            )
+            
+            # Create a chart for section-by-section comparison
+            if sections_data:
+                st.markdown("### Comparaison par Section")
+                df = pd.DataFrame(sections_data)
+                
+                chart = alt.Chart(df).mark_bar().encode(
+                    x=alt.X('percentage:Q', title='Pourcentage de Correspondance'),
+                    y=alt.Y('section:N', title='', sort='-x'),
+                    color=alt.Color('percentage:Q', scale=alt.Scale(
+                        domain=[0, 50, 100],
+                        range=['#ff4b4b', '#ffa500', '#00cc96']
+                    )),
+                    tooltip=['section', 'percentage']
+                ).properties(
+                    height=len(sections_data) * 40
+                )
+                
+                st.altair_chart(chart, use_container_width=True)
+
+def display_section_card(section_name: str, section_data: Dict[str, Dict]) -> None:
+    """
+    Display a section's data in a visually appealing card format.
+    
+    Args:
+        section_name: Name of the section
+        section_data: Comparison data for the section
+    """
+    display_name = section_name.replace('_', ' ').title()
+    
+    with st.expander(f"📊 {display_name}", expanded=True):
+        # Calculate section metrics
+        total_comparisons = 0
+        successful_matches = 0
+        
+        for field, data in section_data.items():
+            if isinstance(data, dict):
+                # Handle nested structures
+                if field in ['adultes', 'pediatriques']:
+                    st.markdown(f"### {field.title()}")
+                    for subfield, subdata in data.items():
+                        display_field_card(subfield, subdata)
+                        
+                        # Count matches
+                        match_keys = [k for k in subdata.keys() if k.startswith('match_')]
+                        total_comparisons += len(match_keys)
+                        successful_matches += sum(1 for k in match_keys if subdata.get(k, False))
+                else:
+                    display_field_card(field, data)
+                    
+                    # Count matches
+                    match_keys = [k for k in data.keys() if k.startswith('match_')]
+                    total_comparisons += len(match_keys)
+                    successful_matches += sum(1 for k in match_keys if data.get(k, False))
+        
+        # Section summary
+        if total_comparisons > 0:
+            match_percentage = (successful_matches / total_comparisons) * 100
+            
+            # Visual progress indicator
+            st.markdown(f"### Résumé de la Section: {display_name}")
+            
+            # Use columns for better layout
+            cols = st.columns([3, 1])
+            with cols[0]:
+                st.progress(match_percentage / 100)
+            with cols[1]:
+                if match_percentage == 100:
+                    st.markdown(f'<p style="color:#00cc96; font-weight:bold; text-align:center; font-size:1.2rem;">100% ✅</p>', unsafe_allow_html=True)
+                elif match_percentage >= 75:
+                    st.markdown(f'<p style="color:#ffa500; font-weight:bold; text-align:center; font-size:1.2rem;">{match_percentage:.1f}% ⚠️</p>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<p style="color:#ff4b4b; font-weight:bold; text-align:center; font-size:1.2rem;">{match_percentage:.1f}% ❌</p>', unsafe_allow_html=True)
+
+def display_field_card(field_name: str, data: Dict[str, Any]) -> None:
+    """
+    Display data for a specific field in an attractive card layout.
     
     Args:
         field_name: Name of the field
         data: Comparison data for the field
-        indent: Indentation level for nested fields
     """
-    with st.container():
-        # Header with field name
-        indentation = "→ " * indent
-        display_name = field_name.replace('_', ' ').title()
-        st.markdown(f"**{indentation}{display_name}**")
-        
-        # Define data sources with labels and access keys
-        data_sources = {
-            "RVD Original": {'key': 'rvd_original', 'icon': '📄'},
-            "RVD Relevé": {'key': 'rvd_releve', 'icon': '📋'},
-            "AED": {'key': 'aed', 'icon': '🔌'},
-            "Image": {'key': 'image', 'icon': '📷'}
+    display_name = field_name.replace('_', ' ').title()
+    
+    # Define data sources with labels, icons, and colors
+    data_sources = {
+        "RVD Original": {'key': 'rvd_original', 'icon': '📄', 'color': '#6c757d'},
+        "RVD Relevé": {'key': 'rvd_releve', 'icon': '📋', 'color': '#007bff'},
+        "AED": {'key': 'aed', 'icon': '🔌', 'color': '#28a745'},
+        "Image": {'key': 'image', 'icon': '📷', 'color': '#6610f2'}
+    }
+    
+    # Extract values
+    values = {}
+    valid_values = 0
+    for label, source_info in data_sources.items():
+        value = data.get(source_info['key'], None)
+        values[label] = {
+            'value': value if value is not None else '-',
+            'icon': source_info['icon'],
+            'color': source_info['color']
         }
+        if value is not None and value != 'N/A' and value != '-':
+            valid_values += 1
+    
+    if valid_values >= 2:
+        # Card container
+        st.markdown(f"""
+        <div class="comparison-card" style="background-color: #ffffff;">
+            <h4 style="margin-top: 0; color: #333;">{display_name}</h4>
+            <p style="color: #666; font-size: 0.8rem; margin-bottom: 1rem;">Nom technique: {field_name}</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Extract values and count valid ones
-        values = {}
-        valid_values = 0
-        for label, source_info in data_sources.items():
-            value = data.get(source_info['key'], 'N/A')
-            values[label] = {'value': value, 'icon': source_info['icon']}
-            if value != 'N/A' and value is not None:
-                valid_values += 1
+        # Data source comparison
+        source_cols = st.columns(len(data_sources))
+        for i, (label, info) in enumerate(values.items()):
+            with source_cols[i]:
+                value_display = info['value'] if info['value'] not in [None, 'N/A', '-'] else '-'
+                
+                st.markdown(f"""
+                <div style="padding: 0.5rem; border-left: 3px solid {info['color']}; background-color: #f8f9fa; height: 100%;">
+                    <p style="margin: 0; font-weight: 600; color: {info['color']};">
+                        {info['icon']} {label}
+                    </p>
+                    <div class="data-value" style="margin-top: 0.5rem; width: 100%;">
+                        {value_display}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
         
-        if valid_values >= 2:
-            # Create a single row with all values
-            cols = st.columns([2, 2, 2, 2, 2])
-            
-            # Display field name with tooltip for technical details
-            cols[0].markdown(
-                f"<span title='Field technical name: {field_name}'>*Field:*  \n`{display_name}`</span>",
-                unsafe_allow_html=True
-            )
-            
-            # Display each value with its label and icon
-            for i, (label, info) in enumerate(values.items(), 1):
-                if i < len(cols):
-                    if info['value'] != 'N/A' and info['value'] is not None:
-                        cols[i].markdown(f"*{info['icon']} {label}:*  \n`{info['value']}`")
-                    else:
-                        cols[i].markdown(f"*{info['icon']} {label}:*  \n`-`")
-            
-            # Calculate and display match status with improved visuals
-            match_keys = [k for k in data.keys() if k.startswith('match_')]
+        # Calculate and display match status
+        match_keys = [k for k in data.keys() if k.startswith('match_')]
+        if match_keys:
             matches = sum(1 for k in match_keys if data.get(k, False))
+            match_percentage = (matches / len(match_keys)) * 100
             
-            # Only display if there are match keys
-            if match_keys:
-                match_percentage = (matches / len(match_keys)) * 100
-                
-                # Create color gradient based on match percentage
+            # Show match status with column layout
+            cols = st.columns([7, 3])
+            
+            with cols[0]:
+                # Create a more visually appealing progress bar
                 color = get_match_color(match_percentage)
-                
-                status_text = f"Match: {matches}/{len(match_keys)} ({match_percentage:.0f}%)"
-                
-                # Use a progress bar to show match percentage
-                st.progress(match_percentage / 100)
-                
-                # Add a status indicator with appropriate styling
+                st.markdown(f"""
+                <div style="background-color: #e9ecef; border-radius: 5px; height: 10px; width: 100%; margin-top: 0.5rem;">
+                    <div style="background-color: {color}; width: {match_percentage}%; height: 100%; border-radius: 5px;"></div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with cols[1]:
+                # Match status indicator
                 if matches == len(match_keys):
-                    st.success(f"✅ {status_text}")
+                    st.markdown(f'<p class="match-indicator" style="color:#00cc96; text-align:center;">100% ✅</p>', unsafe_allow_html=True)
                 elif match_percentage >= 50:
-                    st.warning(f"⚠️ {status_text}")
+                    st.markdown(f'<p class="match-indicator" style="color:#ffa500; text-align:center;">{match_percentage:.0f}% ⚠️</p>', unsafe_allow_html=True)
                 else:
-                    st.error(f"❌ {status_text}")
+                    st.markdown(f'<p class="match-indicator" style="color:#ff4b4b; text-align:center;">{match_percentage:.0f}% ❌</p>', unsafe_allow_html=True)
         
-        # Display errors with more detailed formatting
+        # Display errors with improved formatting
         if 'errors' in data and data['errors']:
-            with st.expander("⚠️ Erreurs détectées", expanded=True):
+            with st.expander("⚠️ Problèmes Détectés", expanded=False):
                 for err in data['errors']:
-                    st.error(f"• {err}")
+                    st.markdown(f"""
+                    <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 0.75rem; margin-bottom: 0.5rem;">
+                        <p style="margin: 0; color: #856404;">• {err}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
         
         if 'error' in data and data['error']:
-            st.error(f"🚫 Erreur critique: {data['error']}")
+            st.markdown(f"""
+            <div style="background-color: #f8d7da; border-left: 4px solid #dc3545; padding: 0.75rem; margin: 1rem 0;">
+                <p style="margin: 0; color: #721c24;"><strong>🚫 Erreur critique:</strong> {data['error']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Add a subtle separator
+        st.markdown("<hr style='margin: 1.5rem 0; opacity: 0.2;'>", unsafe_allow_html=True)
 
 def get_match_color(percentage: float) -> str:
-    """Generate a color on a gradient from red to green based on percentage.
+    """
+    Generate a color on a gradient from red to green based on percentage.
     
     Args:
         percentage: Match percentage (0-100)
@@ -139,65 +342,56 @@ def get_match_color(percentage: float) -> str:
     
     return f"#{r:02x}{g:02x}{b:02x}"
 
-def display_section_comparison(title: str, section_data: Dict[str, Dict]) -> None:
-    """Display comparison results for a specific equipment section with relevé data.
-
-    Args:
-        title: Title of the section.
-        section_data: Comparison data for the section.
-    """
-    if not section_data:
-        return
+# Sample usage
+if __name__ == "__main__":
+    st.set_page_config(
+        page_title="Rapport de Comparaison",
+        page_icon="📊",
+        layout="wide"
+    )
     
-    st.subheader(title)
-    st.markdown("---")
-    
-    # Calculate overall match status for the section
-    total_comparisons = 0
-    successful_matches = 0
-    
-    for field, data in section_data.items():
-        if isinstance(data, dict):
-            # Check if it's a nested structure (like electrodes)
-            if field in ['adultes', 'pediatriques']:
-                if data:  # Only display if there's data
-                    st.markdown(f"### {field.title()}")
-                    for subfield, subdata in data.items():
-                        display_field_data(subfield, subdata, indent=1)
-                        
-                        # Count matches for statistics
-                        match_keys = [k for k in subdata.keys() if k.startswith('match_')]
-                        total_comparisons += len(match_keys)
-                        successful_matches += sum(1 for k in match_keys if subdata.get(k, False))
-                        
-                        st.markdown("---")
-            else:
-                display_field_data(field, data)
-                
-                # Count matches for statistics
-                match_keys = [k for k in data.keys() if k.startswith('match_')]
-                total_comparisons += len(match_keys)
-                successful_matches += sum(1 for k in match_keys if data.get(k, False))
-                
-                st.markdown("---")
-    
-    # Display overall status
-    if total_comparisons > 0:
-        match_percentage = (successful_matches / total_comparisons) * 100
-        st.metric(
-            label=f"Correspondance globale pour {title}", 
-            value=f"{match_percentage:.1f}%",
-            delta=None
-        )
-        
-        # Color-coded status message
-        if match_percentage == 100:
-            st.success("✅ Toutes les données correspondent parfaitement!")
-        elif match_percentage >= 75:
-            st.warning(f"⚠️ {successful_matches} correspondances sur {total_comparisons} vérifications")
-        else:
-            st.error(f"❌ Seulement {successful_matches} correspondances sur {total_comparisons} vérifications")
-
+    # Demo data structure
+    sample_data = {
+        "informations_generales": {
+            "model": {
+                "rvd_original": "Zoll AED Plus",
+                "rvd_releve": "Zoll AED Plus",
+                "aed": "Zoll AED Plus",
+                "image": "Zoll AED Plus",
+                "match_rvd_aed": True,
+                "match_rvd_image": True
+            },
+            "serial_number": {
+                "rvd_original": "X12345678",
+                "rvd_releve": "X12345678",
+                "aed": "X12345678",
+                "image": None,
+                "match_rvd_aed": True,
+                "errors": ["Numéro de série non visible sur l'image"]
+            }
+        },
+        "electrodes": {
+            "adultes": {
+                "model": {
+                    "rvd_original": "CPR-D-padz",
+                    "rvd_releve": "CPR-D-padz",
+                    "aed": "CPR-D",
+                    "image": "CPR-D-padz",
+                    "match_rvd_aed": False,
+                    "match_rvd_image": True,
+                    "errors": ["Discordance entre le modèle RVD et AED"]
+                },
+                "expiry_date": {
+                    "rvd_original": "2025-06-30",
+                    "rvd_releve": "2025-06-30",
+                    "aed": "2025-06-30",
+                    "image": "2025-06-30",
+                    "match_rvd_aed": True,
+                    "match_rvd_image": True
+                }
+            }
+        }
+    }
 
 # Helper function to open file dialog
 def save_file_dialog(default_name):
@@ -385,24 +579,78 @@ def render_ui(client, reader):
     ])
 
     with tab1:
+    # Header with styled title
         st.title("📋 Téléversement des documents")
+        
+        # Add custom CSS for better styling
+        st.markdown("""
+        <style>
+        .upload-container {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            margin-bottom: 1rem;
+        }
+        .success-message {
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .file-status {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-bottom: 0.5rem;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Divider
         st.markdown("---")
+        
+        # File upload section in expander
         with st.expander("Téléverser des documents", expanded=True):
+            # Styled container for upload
+            st.markdown('<div class="upload-container">', unsafe_allow_html=True)
+            
             uploaded_files = st.file_uploader(
                 "Glissez et déposez des fichiers ici",
                 type=ALLOWED_EXTENSIONS,
                 accept_multiple_files=True,
                 help="Téléverser des rapports PDF et des images de dispositifs"
             )
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Process files if uploaded
             if uploaded_files:
                 with st.container() as processing_container:
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
+                    # Create columns for better layout
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                    
+                    with col2:
+                        file_counter = st.empty()
+                        file_counter.markdown(f'<div class="file-status">0/{len(uploaded_files)} fichiers</div>', unsafe_allow_html=True)
+                    
                     error_container = st.empty()
                     total_files = len(uploaded_files)
-
+                    
+                    # Process each file
                     for i, uploaded_file in enumerate(uploaded_files):
                         try:
+                            # Update visual indicators
+                            progress_value = i / total_files
+                            progress_bar.progress(progress_value)
+                            status_text.info(f"Traitement de: {uploaded_file.name}")
+                            file_counter.markdown(f'<div class="file-status">{i}/{total_files} fichiers</div>', unsafe_allow_html=True)
+                            
+                            # Process the file
                             process_uploaded_file(
                                 uploaded_file, progress_bar, status_text,
                                 error_container, i, total_files, client, reader
@@ -411,124 +659,719 @@ def render_ui(client, reader):
                             error_container.error(
                                 f"Erreur de valeur lors du traitement de {uploaded_file.name} : {e}"
                             )
-
+                    
+                    # Complete the progress
+                    progress_bar.progress(1.0)
+                    file_counter.markdown(f'<div class="file-status">{total_files}/{total_files} fichiers</div>', unsafe_allow_html=True)
+                    
+                    # Store uploaded files in session state
                     st.session_state.uploaded_files = uploaded_files
-                    st.success(f"Traitement terminé pour tous les {total_files} fichiers.")
+                    
+                    # Final success message
+                    st.markdown(f"""
+                    <div class="success-message">
+                        <b>✅ Traitement terminé pour tous les {total_files} fichiers.</b>
+                    </div>
+                    """, unsafe_allow_html=True)
 
     with tab2:
+    # ---- CSS for modern dashboard design ----
         st.markdown("""
-        <div style="padding: 10px 0; margin-bottom: 20px;">
-            <h1 style="margin: 0; font-size: 2rem;">📊 Analyse des données traitées</h1>
-            <p style="opacity: 0.8;">Visualisation des données extraites des documents</p>
+        <style>
+        /* Main container styling */
+        .main-container {
+            padding: 0;
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        /* Dashboard header */
+        .dashboard-title {
+            background-color: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+            margin-bottom: 1.5rem;
+            border-left: 5px solid #3f51b5;
+        }
+        
+        /* Card styles */
+        .data-card {
+            background-color: white;
+            border-radius: 12px;
+            padding: 1.2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            height: 100%;
+            transition: all 0.3s ease;
+        }
+        
+        .data-card:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        /* Section headers */
+        .section-header {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #3f51b5;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        /* Document card */
+        .document-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #f0f0f0;
+        }
+        
+        .document-image {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .document-content {
+            padding: 1rem;
+            flex-grow: 1;
+        }
+        
+        .document-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .document-info {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.5rem 1rem;
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+        }
+        
+        .info-label {
+            color: #666;
+        }
+        
+        .document-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .action-button {
+            background-color: #f5f5f5;
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            border: none;
+            color: #333;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            transition: background-color 0.2s;
+            width: 100%;
+            justify-content: center;
+        }
+        
+        .action-button:hover {
+            background-color: #e0e0e0;
+        }
+        
+        .success-tag {
+            color: #2e7d32;
+            background-color: rgba(46, 125, 50, 0.1);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .warning-tag {
+            color: #ed6c02;
+            background-color: rgba(237, 108, 2, 0.1);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        /* Empty state */
+        .empty-state {
+            background-color: #f8f9fa;
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            color: #666;
+        }
+        
+        /* Tabs styling */
+        .custom-tabs {
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 1.5rem;
+            display: flex;
+            gap: 1.5rem;
+        }
+        
+        .custom-tab {
+            padding: 0.75rem 0;
+            font-weight: 500;
+            color: #666;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .custom-tab.active {
+            color: #3f51b5;
+        }
+        
+        .custom-tab.active:after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: #3f51b5;
+        }
+        
+        /* Filter chip */
+        .filter-chip {
+            display: inline-flex;
+            align-items: center;
+            background-color: #f5f5f5;
+            padding: 0.3rem 0.75rem;
+            border-radius: 16px;
+            margin-right: 0.5rem;
+            font-size: 0.85rem;
+            border: 1px solid #e0e0e0;
+            cursor: pointer;
+        }
+        
+        .filter-chip.active {
+            background-color: #e8eaf6;
+            border-color: #c5cae9;
+            color: #3f51b5;
+        }
+        
+        /* Progress indicator */
+        .progress-container {
+            margin-bottom: 0.5rem;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background-color: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background-color: #3f51b5;
+            border-radius: 4px;
+        }
+        
+        /* Stats counter */
+        .stats-counter {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .counter-item {
+            text-align: center;
+            padding: 1rem;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .counter-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #3f51b5;
+            margin-bottom: 0.25rem;
+        }
+        
+        .counter-label {
+            font-size: 0.8rem;
+            color: #666;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Dashboard header
+        st.markdown("""
+        <div class="dashboard-title">
+            <h2 style="margin:0; font-size:1.5rem; font-weight:600;">📊 Analyse des données traitées</h2>
+            <p style="margin:0.5rem 0 0 0; color:#666;">Visualisation et exploration des données extraites des documents</p>
         </div>
         """, unsafe_allow_html=True)
         
-        with st.expander("Données extraites", expanded=True):
+        # Stats counters - key metrics at a glance
+        total_documents = len(st.session_state.processed_data.get('images', []))
+        classified_docs = sum(1 for img in st.session_state.processed_data.get('images', []) 
+                        if img['type'] not in ['Non classifié', 'Erreur de classification', 'Erreur de traitement'])
+        error_docs = total_documents - classified_docs
+        
+        st.markdown("""
+        <div class="stats-counter">
+            <div class="counter-item">
+                <div class="counter-value">{}</div>
+                <div class="counter-label">Documents</div>
+            </div>
+            <div class="counter-item">
+                <div class="counter-value" style="color: #2e7d32;">{}</div>
+                <div class="counter-label">Traités</div>
+            </div>
+            <div class="counter-item">
+                <div class="counter-value" style="color: #ed6c02;">{}</div>
+                <div class="counter-label">Erreurs</div>
+            </div>
+            <div class="counter-item">
+                <div class="counter-value">{}%</div>
+                <div class="counter-label">Réussite</div>
+            </div>
+        </div>
+        """.format(
+            total_documents,
+            classified_docs,
+            error_docs,
+            int(classified_docs / total_documents * 100) if total_documents > 0 else 0
+        ), unsafe_allow_html=True)
+        
+        # Main content tabs
+        st.markdown("""
+        <div class="custom-tabs">
+            <div class="custom-tab active" id="tab-data">Données extraites</div>
+            <div class="custom-tab" id="tab-images">Images analysées</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Create container for Data tab (shown by default)
+        data_container = st.container()
+        
+        with data_container:
+            # Create two column layout for data cards
             col1, col2 = st.columns(2)
+            
             with col1:
-                st.subheader("Données RVD")
+                st.markdown("""
+                <div class="section-header">
+                    <span>📄 Données RVD</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
                 if st.session_state.processed_data['RVD']:
-                    st.json(st.session_state.processed_data['RVD'], expanded=False)
+                    st.markdown('<div class="data-card">', unsafe_allow_html=True)
+                    
+                    # JSON viewer
+                    with st.expander("Voir JSON complet", expanded=False):
+                        st.json(st.session_state.processed_data['RVD'])
+                    
+                    # Key metrics display
+                    rvd_data = st.session_state.processed_data['RVD']
+                    
+                    # Display key-value pairs in a more readable format
+                    if isinstance(rvd_data, dict):
+                        for key, value in rvd_data.items():
+                            if key in ['date', 'serial', 'id', 'status']:  # Important fields to highlight
+                                st.metric(label=key.capitalize(), value=value)
+                            elif isinstance(value, (int, float, str)):  # Simple values
+                                st.markdown(f"**{key.capitalize()}:** {value}")
+                            elif isinstance(value, list) and len(value) > 0:  # List preview
+                                st.markdown(f"**{key.capitalize()}:** {len(value)} éléments")
+                                with st.expander(f"Voir les détails de {key}"):
+                                    st.write(value)
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
                 else:
-                    st.info("Aucune donnée RVD n'a été traitée.")
+                    st.markdown("""
+                    <div class="empty-state">
+                        <p>Aucune donnée RVD n'a été traitée</p>
+                        <p style="font-size:0.85rem; margin-top:0.5rem;">Veuillez traiter des documents pour voir les résultats</p>
+                    </div>
+                    """, unsafe_allow_html=True)
             
             with col2:
-                st.subheader(f"Données AED {st.session_state.dae_type}")
                 aed_type = f'AEDG{st.session_state.dae_type[-1]}'
+                
+                st.markdown(f"""
+                <div class="section-header">
+                    <span>📊 Données AED {st.session_state.dae_type}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
                 aed_data = st.session_state.processed_data.get(aed_type, {})
                 if aed_data:
-                    st.json(aed_data, expanded=False)
+                    st.markdown('<div class="data-card">', unsafe_allow_html=True)
+                    
+                    # JSON viewer
+                    with st.expander("Voir JSON complet", expanded=False):
+                        st.json(aed_data)
+                    
+                    # Visualize key AED data
+                    if isinstance(aed_data, dict):
+                        for key, value in aed_data.items():
+                            if key in ['date', 'serial', 'id', 'status']:  # Important fields
+                                st.metric(label=key.capitalize(), value=value)
+                            elif isinstance(value, (int, float)) and key not in ['id']:  # Numeric values - potential for charts
+                                st.metric(label=key.capitalize(), value=value)
+                            elif isinstance(value, list) and len(value) > 0:  # List preview
+                                st.markdown(f"**{key.capitalize()}:** {len(value)} éléments")
+                                with st.expander(f"Voir les détails de {key}"):
+                                    st.write(value)
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
                 else:
-                    st.info("Aucune donnée AED n'a été trouvée.")
+                    st.markdown("""
+                    <div class="empty-state">
+                        <p>Aucune donnée AED n'a été trouvée</p>
+                        <p style="font-size:0.85rem; margin-top:0.5rem;">Veuillez traiter des documents pour voir les résultats</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+        
+        # Data visualization section
+        st.markdown("""
+        <div class="section-header" style="margin-top:2rem;">
+            <span>📈 Visualisation des données</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.session_state.processed_data.get('images'):
+            # Document types distribution
+            doc_types = {}
+            for img in st.session_state.processed_data['images']:
+                doc_type = img.get('type', 'Inconnu')
+                if doc_type in doc_types:
+                    doc_types[doc_type] += 1
+                else:
+                    doc_types[doc_type] = 1
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown('<div class="data-card">', unsafe_allow_html=True)
+                st.markdown("<h4 style='margin-top:0;'>Types de documents</h4>", unsafe_allow_html=True)
+                
+                if doc_types:
+                    # Create pie chart
+                    fig = {
+                        'data': [{
+                            'values': list(doc_types.values()),
+                            'labels': list(doc_types.keys()),
+                            'type': 'pie',
+                            'hole': 0.4,
+                            'marker': {'colors': ['#3f51b5', '#f44336', '#4caf50', '#ff9800', '#9c27b0']}
+                        }],
+                        'layout': {
+                            'margin': {'t': 0, 'b': 0, 'l': 0, 'r': 0},
+                            'height': 300,
+                            'legend': {'orientation': 'h', 'y': -0.2}
+                        }
+                    }
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Pas assez de données pour créer une visualisation")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown('<div class="data-card">', unsafe_allow_html=True)
+                st.markdown("<h4 style='margin-top:0;'>Statut du traitement</h4>", unsafe_allow_html=True)
+                
+                # Progress bar
+                if total_documents > 0:
+                    progress_pct = classified_docs / total_documents
+                    st.markdown(f"""
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width:{progress_pct * 100}%;"></div>
+                        </div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#666;">
+                        <span>0%</span>
+                        <span>{int(progress_pct * 100)}% Complété</span>
+                        <span>100%</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Status breakdown
+                    status_data = {
+                        'Status': ['Traités', 'Erreurs'],
+                        'Count': [classified_docs, error_docs]
+                    }
+                    
+                    fig = {
+                        'data': [{
+                            'x': status_data['Status'],
+                            'y': status_data['Count'],
+                            'type': 'bar',
+                            'marker': {
+                                'color': ['#4caf50', '#f44336']
+                            }
+                        }],
+                        'layout': {
+                            'margin': {'t': 20, 'b': 40, 'l': 40, 'r': 20},
+                            'height': 240
+                        }
+                    }
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Aucun document n'a été traité pour l'analyse")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class="empty-state">
+                <p>Aucune donnée disponible pour la visualisation</p>
+                <p style="font-size:0.85rem; margin-top:0.5rem;">Veuillez traiter des documents pour générer des visualisations</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Document images section
+        st.markdown("""
+        <div class="section-header" style="margin-top:2rem;">
+            <span>🖼️ Images traitées</span>
+        </div>
+        """, unsafe_allow_html=True)
         
         if st.session_state.processed_data['images']:
-            with st.expander("Résultats d'analyse d'images", expanded=True):
-                st.markdown("### Images traitées")
-                cols = st.columns(3)
-                for idx, img_data in enumerate(st.session_state.processed_data['images']):
-                    with cols[idx % 3]:
-                        st.markdown(f"""
-                        <div class="image-card">
-                        """, unsafe_allow_html=True)
-                        st.image(img_data['image'], use_container_width=True)
-                        
-                        type_display = img_data['type']
-                        status_icon = "✅"
-                        if type_display in ['Non classifié', 'Erreur de classification', 'Erreur de traitement']:
-                            status_icon = "⚠️"
-                        
-                        st.markdown(
-                            f"""
-                            <div style="padding: 10px 5px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                    <strong style="font-size: 16px;">{type_display}</strong>
-                                    <span style="font-size: 18px;">{status_icon}</span>
-                                </div>
-                                <div style="font-size: 14px; margin-bottom: 5px;">
-                                    <strong>Numéro de série:</strong> {img_data.get('serial', 'N/D')}
-                                </div>
-                                <div style="font-size: 14px;">
-                                    <strong>Date:</strong> {img_data.get('date', 'N/D')}
-                                </div>
+            # Filter controls
+            st.markdown("""
+            <div style="margin-bottom:1rem;">
+                <span style="font-size:0.9rem; color:#666; margin-right:0.5rem;">Filtrer:</span>
+                <span class="filter-chip active">Tous</span>
+                <span class="filter-chip">Réussis</span>
+                <span class="filter-chip">Erreurs</span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # For this example, we'll just show all images
+            filtered_images = st.session_state.processed_data['images']
+            
+            # Create responsive grid with 3 columns
+            image_cols = st.columns(3)
+            
+            for idx, img_data in enumerate(filtered_images):
+                with image_cols[idx % 3]:
+                    type_display = img_data['type']
+                    status_tag = "warning-tag" if type_display in ['Non classifié', 'Erreur de classification', 'Erreur de traitement'] else "success-tag"
+                    status_icon = "⚠️" if status_tag == "warning-tag" else "✅"
+                    
+                    st.markdown(f"""
+                    <div class="document-card">
+                        <img src="data:image/png;base64,{img_data['image']}" class="document-image" alt="Document image" />
+                        <div class="document-content">
+                            <div class="document-title">
+                                <span>{type_display}</span>
+                                <span class="{status_tag}">{status_icon} {status_tag.split('-')[0].capitalize()}</span>
                             </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-                        st.markdown("</div>", unsafe_allow_html=True)
+                            <div class="document-info">
+                                <span class="info-label">Numéro de série:</span>
+                                <span>{img_data.get('serial', 'N/D')}</span>
+                                <span class="info-label">Date:</span>
+                                <span>{img_data.get('date', 'N/D')}</span>
+                            </div>
+                            <div class="document-actions">
+                                <button class="action-button">
+                                    <span>👁️</span> Détails
+                                </button>
+                                <button class="action-button">
+                                    <span>📋</span> Exporter
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
         else:
-            st.info("Aucune image traitée à afficher pour le moment.")
+            st.markdown("""
+            <div class="empty-state">
+                <p>Aucune image n'a été traitée</p>
+                <p style="font-size:0.85rem; margin-top:0.5rem;">Veuillez charger et traiter des documents pour visualiser les résultats</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Add JavaScript for tab functionality
+        st.markdown("""
+        <script>
+        // This is where tab switching JavaScript would go in a real application
+        // Note: Streamlit's iframe restrictions prevent this from actually working
+        </script>
+        """, unsafe_allow_html=True)
 
     with tab3:
-        st.title("📋vs📑 Comparaison des documents")
-        with st.expander("Comparaison des documents", expanded=True):
-            # Run comparison and get results organized by equipment sections
-            comparison_results = compare_data()
-            
-            # Display results by equipment section
-            display_section_comparison("Défibrillateur", comparison_results.get('defibrillateur', {}))
-            display_section_comparison("Batterie", comparison_results.get('batterie', {}))
-            display_section_comparison("Électrodes", comparison_results.get('electrodes', {}))
-            
-            # Check if all matches are successful
-            def check_matches(section_data):
-                for key, value in section_data.items():
-                    if isinstance(value, dict):
-                        if 'match' in value and not value.get('match', False):
-                            return False
-                        if 'match_rvd_aed' in value and not value.get('match_rvd_aed', False):
-                            return False
-                        if 'match_rvd_image' in value and not value.get('match_rvd_image', False):
-                            return False
-                        if key in ['adultes', 'pediatriques']:
-                            if not check_matches(value):
-                                return False
-                return True
-            
-            all_matches = all(
-                check_matches(section_data)
-                for section_name, section_data in comparison_results.items()
-            )
-            
-            if all_matches:
-                st.success("Tous les contrôles sont réussis ! Le dispositif est conforme.")
-            else:
-                # Collect failed checks
-                failed = []
-                for section_name, section_data in comparison_results.items():
-                    for field, data in section_data.items():
-                        if isinstance(data, dict):
-                            if 'match' in data and not data.get('match', False):
-                                failed.append(f"{section_name} - {field}")
-                            if 'match_rvd_aed' in data and not data.get('match_rvd_aed', False):
-                                failed.append(f"{section_name} - {field} (RVD vs AED)")
-                            if 'match_rvd_image' in data and not data.get('match_rvd_image', False):
-                                failed.append(f"{section_name} - {field} (RVD vs Image)")
-                            if field in ['adultes', 'pediatriques']:
-                                for subfield, subdata in data.items():
-                                    if 'match' in subdata and not subdata.get('match', False):
-                                        failed.append(f"{section_name} - {field} - {subfield}")
+        # Import datetime at the top level of the tab3 block
+        from datetime import datetime
+        
+        st.markdown("""
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <h1>📋 vs 📑 Comparaison des Documents</h1>
+            <p style="color: #6c757d; font-size: 1.1rem;">Vérification de cohérence entre les différentes sources de données</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Add an information box at the top
+        st.info("""
+        Cette section compare les informations entre les documents de référence (RVD), 
+        les données de l'appareil (AED) et les images. Le système vérifie automatiquement la cohérence 
+        des données critiques pour garantir la conformité du dispositif.
+        """)
+        
+        # Run comparison and get results organized by equipment sections
+        comparison_results = compare_data()
+        
+        # Use the comprehensive dashboard function instead of individual section displays
+        display_comparison_dashboard(comparison_results)
+        
+        # Add a clear summary section at the bottom
+        st.markdown("## 📊 Résumé de la Validation")
+        
+        # Check if all matches are successful with improved checking logic
+        def check_matches(section_data):
+            if not section_data:
+                return True, []
                 
-                st.error(f"Échec de validation pour : {', '.join(failed)}")
+            all_matched = True
+            failed_items = []
+            
+            for key, value in section_data.items():
+                if isinstance(value, dict):
+                    # Check direct match flags
+                    match_keys = [k for k in value.keys() if k.startswith('match_')]
+                    
+                    if match_keys:
+                        for match_key in match_keys:
+                            if not value.get(match_key, False):
+                                all_matched = False
+                                source_type = match_key.replace('match_', '')
+                                failed_items.append((key, source_type))
+                    
+                    # Check nested structures (like adultes/pediatriques)
+                    if key in ['adultes', 'pediatriques']:
+                        nested_matched, nested_failed = check_matches(value)
+                        if not nested_matched:
+                            all_matched = False
+                            # Prefix the nested failures with the parent key
+                            failed_items.extend([(f"{key} - {item[0]}", item[1]) for item in nested_failed])
+            
+            return all_matched, failed_items
+        
+        # Process all sections
+        all_matches = True
+        all_failed_items = []
+        
+        for section_name, section_data in comparison_results.items():
+            section_matches, section_failed = check_matches(section_data)
+            if not section_matches:
+                all_matches = False
+                # Add section name to failed items
+                all_failed_items.extend([(f"{section_name} - {item[0]}", item[1]) for item in section_failed])
+        
+        # Display summary with visual elements
+        if all_matches:
+            st.markdown("""
+            <div style="background-color: #d4edda; border-radius: 10px; padding: 2rem; text-align: center; 
+                    margin-top: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <h2 style="color: #155724; margin-bottom: 1rem;">✅ Validation Réussie</h2>
+                <p style="color: #155724; font-size: 1.1rem;">
+                    Tous les contrôles sont réussis ! Le dispositif est conforme aux spécifications.
+                </p>
+                <div style="font-size: 3rem; margin: 1rem 0;">🎉</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            # Create a more structured failed validation summary
+            st.markdown("""
+            <div style="background-color: #f8d7da; border-radius: 10px; padding: 2rem; 
+                    margin-top: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <h2 style="color: #721c24; margin-bottom: 1rem; text-align: center;">❌ Échec de Validation</h2>
+                <p style="color: #721c24; font-size: 1.1rem; text-align: center;">
+                    Des incohérences ont été détectées entre les différentes sources de données
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Group failed items by section for better organization
+            failed_by_section = {}
+            for item, source_type in all_failed_items:
+                section_parts = item.split(' - ', 1)
+                section = section_parts[0]
+                field = section_parts[1] if len(section_parts) > 1 else ""
+                
+                if section not in failed_by_section:
+                    failed_by_section[section] = []
+                    
+                failed_by_section[section].append((field, source_type))
+            
+            # Display failed items in an organized, expandable format
+            for section, failures in failed_by_section.items():
+                with st.expander(f"🔍 Problèmes dans la section: {section}", expanded=True):
+                    for field, source_type in failures:
+                        source_labels = {
+                            'rvd_aed': 'RVD vs AED',
+                            'rvd_image': 'RVD vs Image',
+                            'releve_aed': 'Relevé vs AED',
+                            'releve_image': 'Relevé vs Image'
+                        }
+                        
+                        source_label = source_labels.get(source_type, source_type)
+                        field_display = field.replace('_', ' ').title()
+                        
+                        st.markdown(f"""
+                        <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; 
+                                padding: 0.75rem; margin-bottom: 0.5rem;">
+                            <p style="margin: 0; color: #856404;">
+                                <strong>{field_display}</strong>: Incohérence détectée entre {source_label}
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+            
+            # Add action items for the user
+            st.markdown("""
+            <div style="background-color: #e2e3e5; border-radius: 5px; padding: 1rem; margin-top: 1.5rem;">
+                <h3 style="color: #383d41; margin-top: 0;">Actions recommandées:</h3>
+                <ul style="color: #383d41;">
+                    <li>Vérifiez les données dans le Relevé de Visite Défibrillateur (RVD)</li>
+                    <li>Assurez-vous que les informations de l'appareil (AED) sont correctement enregistrées</li>
+                    <li>Vérifiez la qualité et la lisibilité des images capturées</li>
+                    <li>Corrigez les erreurs identifiées et relancez la comparaison</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Add download report option
+            st.download_button(
+                label="📥 Télécharger le rapport détaillé",
+                data="Rapport détaillé des incohérences",  # This would be generated data in your actual implementation
+                file_name="rapport_validation.txt",
+                mime="text/plain",
+                key="download-report"
+            )
+        
+        # Add a timestamp and signature
+        st.markdown(f"""
+        <div style="text-align: right; margin-top: 2rem; color: #6c757d; font-size: 0.8rem;">
+            Rapport généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}
+        </div>
+        """, unsafe_allow_html=True)
+
+
 
             
 
