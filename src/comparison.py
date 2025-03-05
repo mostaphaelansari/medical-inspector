@@ -178,36 +178,45 @@ def compare_battery_level(rvd: Dict, aed: Dict) -> Dict:
     return result
 
 def compare_electrodes_section(rvd: Dict, images: List[Dict], section_type: str) -> Dict:
-    """Compare electrodes data (either adult or pediatric)"""
+    """
+    Compare electrodes data (either adult or pediatric)
+    Skips comparison if the serial field equals "Électrodes RCP ?"
+    """
     image = get_image_by_type(images, 'Electrodes')
-    
+   
     prefix = "ADULTES" if section_type == "adultes" else "PEDIATRIQUES"
-    
+   
     serial_fields = (
         f'Numéro de série ELECTRODES {prefix}',
-        f'Numéro de série ELECTRODES {prefix} relevé'
+        f'N° série nouvelles électrodes'
     )
     date_fields = (
         f'Date de péremption ELECTRODES {prefix}',
-        f'Date de péremption ELECTRODES {prefix} relevée'
+        f'Date péremption des nouvelles éléctrodes'
     )
-    
+   
     results = {}
-    results['Numéro_de_série'] = compare_rvd_releve(
-        rvd.get(serial_fields[0]),
-        rvd.get(serial_fields[1]),
-        None,
-        image.get('serial') if image else None,
-        normalize_serial
-    )
-
-    results['date_de_péremption'] = compare_dates_with_releve(
-        rvd.get(date_fields[0]),
-        rvd.get(date_fields[1]),
-        None,
-        image.get('date') if image else None
-    )
     
+    # Check if the first serial field is NOT 'Électrodes RCP ?'
+    if rvd.get(serial_fields[0]) != 'Électrodes RCP ?':
+        results['Numéro_de_série'] = compare_rvd_releve(
+            rvd.get(serial_fields[0]),
+            rvd.get(serial_fields[1]),
+            None,
+            image.get('serial') if image else None,
+            normalize_serial
+        )
+        results['date_de_péremption'] = compare_dates_with_releve(
+            rvd.get(date_fields[0]),
+            rvd.get(date_fields[1]),
+            None,
+            image.get('date') if image else None
+        )
+    else:
+        # If the serial number is 'Électrodes RCP ?', set results to None or an appropriate value
+        results['Numéro_de_série'] = None
+        results['date_de_péremption'] = None
+   
     return results
 
 def compare_section(section: str, rvd: Dict, aed: Dict, images: List[Dict]) -> Dict:
