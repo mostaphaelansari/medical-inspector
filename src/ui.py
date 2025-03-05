@@ -5,8 +5,12 @@ import os
 from datetime import datetime
 from tkinter import Tk, filedialog
 import zipfile
+import plotly.express as px  # Add this import at the top of your file
 import pandas as pd
 import altair as alt
+from PIL import Image
+import base64
+from io import BytesIO
 from typing import Dict, Any
 import streamlit as st
 from .config import ALLOWED_EXTENSIONS, CSS_STYLE
@@ -675,9 +679,16 @@ def render_ui(client, reader):
                     """, unsafe_allow_html=True)
 
     with tab2:
-    # ---- CSS for modern dashboard design ----
+        # ---- CSS for modern dashboard design ----
         st.markdown("""
         <style>
+        :root {
+            --primary-color: #3f51b5;
+            --success-color: #2e7d32;
+            --warning-color: #ed6c02;
+            --error-color: #d32f2f;
+        }
+
         /* Main container styling */
         .main-container {
             padding: 0;
@@ -692,7 +703,7 @@ def render_ui(client, reader):
             border-radius: 12px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.04);
             margin-bottom: 1.5rem;
-            border-left: 5px solid #3f51b5;
+            border-left: 5px solid var(--primary-color);
         }
         
         /* Card styles */
@@ -707,6 +718,7 @@ def render_ui(client, reader):
         
         .data-card:hover {
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
         }
         
         /* Section headers */
@@ -714,7 +726,7 @@ def render_ui(client, reader):
             font-size: 1.1rem;
             font-weight: 600;
             margin-bottom: 1rem;
-            color: #3f51b5;
+            color: var(--primary-color);
             display: flex;
             align-items: center;
             gap: 0.5rem;
@@ -730,6 +742,12 @@ def render_ui(client, reader):
             display: flex;
             flex-direction: column;
             border: 1px solid #f0f0f0;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .document-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.12);
         }
         
         .document-image {
@@ -737,6 +755,7 @@ def render_ui(client, reader):
             height: 180px;
             object-fit: cover;
             border-bottom: 1px solid #f0f0f0;
+            background: #f8f9fa;
         }
         
         .document-content {
@@ -792,7 +811,7 @@ def render_ui(client, reader):
         }
         
         .success-tag {
-            color: #2e7d32;
+            color: var(--success-color);
             background-color: rgba(46, 125, 50, 0.1);
             padding: 0.2rem 0.5rem;
             border-radius: 4px;
@@ -801,7 +820,7 @@ def render_ui(client, reader):
         }
         
         .warning-tag {
-            color: #ed6c02;
+            color: var(--warning-color);
             background-color: rgba(237, 108, 2, 0.1);
             padding: 0.2rem 0.5rem;
             border-radius: 4px;
@@ -835,7 +854,7 @@ def render_ui(client, reader):
         }
         
         .custom-tab.active {
-            color: #3f51b5;
+            color: var(--primary-color);
         }
         
         .custom-tab.active:after {
@@ -845,7 +864,7 @@ def render_ui(client, reader):
             left: 0;
             width: 100%;
             height: 2px;
-            background-color: #3f51b5;
+            background-color: var(--primary-color);
         }
         
         /* Filter chip */
@@ -864,7 +883,7 @@ def render_ui(client, reader):
         .filter-chip.active {
             background-color: #e8eaf6;
             border-color: #c5cae9;
-            color: #3f51b5;
+            color: var(--primary-color);
         }
         
         /* Progress indicator */
@@ -881,7 +900,7 @@ def render_ui(client, reader):
         
         .progress-fill {
             height: 100%;
-            background-color: #3f51b5;
+            background-color: var(--primary-color);
             border-radius: 4px;
         }
         
@@ -904,7 +923,7 @@ def render_ui(client, reader):
         .counter-value {
             font-size: 1.5rem;
             font-weight: 700;
-            color: #3f51b5;
+            color: var(--primary-color);
             margin-bottom: 0.25rem;
         }
         
@@ -924,49 +943,40 @@ def render_ui(client, reader):
         """, unsafe_allow_html=True)
         
         # Stats counters - key metrics at a glance
-        total_documents = len(st.session_state.processed_data.get('images', []))
-        classified_docs = sum(1 for img in st.session_state.processed_data.get('images', []) 
-                        if img['type'] not in ['Non classifié', 'Erreur de classification', 'Erreur de traitement'])
-        error_docs = total_documents - classified_docs
+        processed_data = st.session_state.get('processed_data', {})
+        images = processed_data.get('images', [])
         
-        st.markdown("""
+        total_documents = len(images)
+        classified_docs = sum(1 for img in images if img.get('type') not in 
+                        ['Non classifié', 'Erreur de classification', 'Erreur de traitement'])
+        error_docs = total_documents - classified_docs
+        success_rate = int(classified_docs / total_documents * 100) if total_documents > 0 else 0
+        
+        st.markdown(f"""
         <div class="stats-counter">
             <div class="counter-item">
-                <div class="counter-value">{}</div>
+                <div class="counter-value">{total_documents}</div>
                 <div class="counter-label">Documents</div>
             </div>
             <div class="counter-item">
-                <div class="counter-value" style="color: #2e7d32;">{}</div>
+                <div class="counter-value" style="color: var(--success-color);">{classified_docs}</div>
                 <div class="counter-label">Traités</div>
             </div>
             <div class="counter-item">
-                <div class="counter-value" style="color: #ed6c02;">{}</div>
+                <div class="counter-value" style="color: var(--warning-color);">{error_docs}</div>
                 <div class="counter-label">Erreurs</div>
             </div>
             <div class="counter-item">
-                <div class="counter-value">{}%</div>
+                <div class="counter-value">{success_rate}%</div>
                 <div class="counter-label">Réussite</div>
             </div>
         </div>
-        """.format(
-            total_documents,
-            classified_docs,
-            error_docs,
-            int(classified_docs / total_documents * 100) if total_documents > 0 else 0
-        ), unsafe_allow_html=True)
-        
-        # Main content tabs
-        st.markdown("""
-        <div class="custom-tabs">
-            <div class="custom-tab active" id="tab-data">Données extraites</div>
-            <div class="custom-tab" id="tab-images">Images analysées</div>
-        </div>
         """, unsafe_allow_html=True)
         
-        # Create container for Data tab (shown by default)
-        data_container = st.container()
+        # Main content tabs using Streamlit's native tabs
+        tab_data, tab_images = st.tabs(["Données extraites", "Images analysées"])
         
-        with data_container:
+        with tab_data:
             # Create two column layout for data cards
             col1, col2 = st.columns(2)
             
@@ -977,29 +987,25 @@ def render_ui(client, reader):
                 </div>
                 """, unsafe_allow_html=True)
                 
-                if st.session_state.processed_data['RVD']:
-                    st.markdown('<div class="data-card">', unsafe_allow_html=True)
-                    
-                    # JSON viewer
-                    with st.expander("Voir JSON complet", expanded=False):
-                        st.json(st.session_state.processed_data['RVD'])
-                    
-                    # Key metrics display
-                    rvd_data = st.session_state.processed_data['RVD']
-                    
-                    # Display key-value pairs in a more readable format
-                    if isinstance(rvd_data, dict):
-                        for key, value in rvd_data.items():
-                            if key in ['date', 'serial', 'id', 'status']:  # Important fields to highlight
-                                st.metric(label=key.capitalize(), value=value)
-                            elif isinstance(value, (int, float, str)):  # Simple values
-                                st.markdown(f"**{key.capitalize()}:** {value}")
-                            elif isinstance(value, list) and len(value) > 0:  # List preview
-                                st.markdown(f"**{key.capitalize()}:** {len(value)} éléments")
-                                with st.expander(f"Voir les détails de {key}"):
-                                    st.write(value)
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
+                rvd_data = processed_data.get('RVD', {})
+                if rvd_data:
+                    with st.container():
+                        st.markdown('<div class="data-card">', unsafe_allow_html=True)
+                        
+                        # JSON viewer
+                        with st.expander("Voir JSON complet", expanded=False):
+                            st.json(rvd_data)
+                        
+                        # Display key metrics
+                        if isinstance(rvd_data, dict):
+                            cols = st.columns(2)
+                            metric_keys = ['date', 'serial', 'id', 'status']
+                            for i, key in enumerate(metric_keys):
+                                with cols[i % 2]:
+                                    if key in rvd_data:
+                                        st.metric(label=key.capitalize(), value=rvd_data[key])
+                        
+                        st.markdown('</div>', unsafe_allow_html=True)
                 else:
                     st.markdown("""
                     <div class="empty-state">
@@ -1009,35 +1015,30 @@ def render_ui(client, reader):
                     """, unsafe_allow_html=True)
             
             with col2:
-                aed_type = f'AEDG{st.session_state.dae_type[-1]}'
-                
+                aed_type = f'AEDG{st.session_state.get("dae_type", "1")[-1]}'
                 st.markdown(f"""
                 <div class="section-header">
-                    <span>📊 Données AED {st.session_state.dae_type}</span>
+                    <span>📊 Données AED {st.session_state.get("dae_type", "")}</span>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                aed_data = st.session_state.processed_data.get(aed_type, {})
+                aed_data = processed_data.get(aed_type, {})
                 if aed_data:
-                    st.markdown('<div class="data-card">', unsafe_allow_html=True)
-                    
-                    # JSON viewer
-                    with st.expander("Voir JSON complet", expanded=False):
-                        st.json(aed_data)
-                    
-                    # Visualize key AED data
-                    if isinstance(aed_data, dict):
-                        for key, value in aed_data.items():
-                            if key in ['date', 'serial', 'id', 'status']:  # Important fields
-                                st.metric(label=key.capitalize(), value=value)
-                            elif isinstance(value, (int, float)) and key not in ['id']:  # Numeric values - potential for charts
-                                st.metric(label=key.capitalize(), value=value)
-                            elif isinstance(value, list) and len(value) > 0:  # List preview
-                                st.markdown(f"**{key.capitalize()}:** {len(value)} éléments")
-                                with st.expander(f"Voir les détails de {key}"):
-                                    st.write(value)
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    with st.container():
+                        st.markdown('<div class="data-card">', unsafe_allow_html=True)
+                        
+                        with st.expander("Voir JSON complet", expanded=False):
+                            st.json(aed_data)
+                        
+                        if isinstance(aed_data, dict):
+                            cols = st.columns(2)
+                            metric_keys = ['date', 'serial', 'id', 'status']
+                            for i, key in enumerate(metric_keys):
+                                with cols[i % 2]:
+                                    if key in aed_data:
+                                        st.metric(label=key.capitalize(), value=aed_data[key])
+                        
+                        st.markdown('</div>', unsafe_allow_html=True)
                 else:
                     st.markdown("""
                     <div class="empty-state">
@@ -1045,175 +1046,131 @@ def render_ui(client, reader):
                         <p style="font-size:0.85rem; margin-top:0.5rem;">Veuillez traiter des documents pour voir les résultats</p>
                     </div>
                     """, unsafe_allow_html=True)
-        
-        # Data visualization section
-        st.markdown("""
-        <div class="section-header" style="margin-top:2rem;">
-            <span>📈 Visualisation des données</span>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.session_state.processed_data.get('images'):
-            # Document types distribution
-            doc_types = {}
-            for img in st.session_state.processed_data['images']:
-                doc_type = img.get('type', 'Inconnu')
-                if doc_type in doc_types:
-                    doc_types[doc_type] += 1
-                else:
-                    doc_types[doc_type] = 1
             
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown('<div class="data-card">', unsafe_allow_html=True)
-                st.markdown("<h4 style='margin-top:0;'>Types de documents</h4>", unsafe_allow_html=True)
-                
-                if doc_types:
-                    # Create pie chart
-                    fig = {
-                        'data': [{
-                            'values': list(doc_types.values()),
-                            'labels': list(doc_types.keys()),
-                            'type': 'pie',
-                            'hole': 0.4,
-                            'marker': {'colors': ['#3f51b5', '#f44336', '#4caf50', '#ff9800', '#9c27b0']}
-                        }],
-                        'layout': {
-                            'margin': {'t': 0, 'b': 0, 'l': 0, 'r': 0},
-                            'height': 300,
-                            'legend': {'orientation': 'h', 'y': -0.2}
-                        }
-                    }
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("Pas assez de données pour créer une visualisation")
-                
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown('<div class="data-card">', unsafe_allow_html=True)
-                st.markdown("<h4 style='margin-top:0;'>Statut du traitement</h4>", unsafe_allow_html=True)
-                
-                # Progress bar
-                if total_documents > 0:
-                    progress_pct = classified_docs / total_documents
-                    st.markdown(f"""
-                    <div class="progress-container">
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width:{progress_pct * 100}%;"></div>
-                        </div>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#666;">
-                        <span>0%</span>
-                        <span>{int(progress_pct * 100)}% Complété</span>
-                        <span>100%</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Status breakdown
-                    status_data = {
-                        'Status': ['Traités', 'Erreurs'],
-                        'Count': [classified_docs, error_docs]
-                    }
-                    
-                    fig = {
-                        'data': [{
-                            'x': status_data['Status'],
-                            'y': status_data['Count'],
-                            'type': 'bar',
-                            'marker': {
-                                'color': ['#4caf50', '#f44336']
-                            }
-                        }],
-                        'layout': {
-                            'margin': {'t': 20, 'b': 40, 'l': 40, 'r': 20},
-                            'height': 240
-                        }
-                    }
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("Aucun document n'a été traité pour l'analyse")
-                
-                st.markdown('</div>', unsafe_allow_html=True)
-        else:
+            # Data visualization section
             st.markdown("""
-            <div class="empty-state">
-                <p>Aucune donnée disponible pour la visualisation</p>
-                <p style="font-size:0.85rem; margin-top:0.5rem;">Veuillez traiter des documents pour générer des visualisations</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Document images section
-        st.markdown("""
-        <div class="section-header" style="margin-top:2rem;">
-            <span>🖼️ Images traitées</span>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.session_state.processed_data['images']:
-            # Filter controls
-            st.markdown("""
-            <div style="margin-bottom:1rem;">
-                <span style="font-size:0.9rem; color:#666; margin-right:0.5rem;">Filtrer:</span>
-                <span class="filter-chip active">Tous</span>
-                <span class="filter-chip">Réussis</span>
-                <span class="filter-chip">Erreurs</span>
+            <div class="section-header" style="margin-top:2rem;">
+                <span>📈 Visualisation des données</span>
             </div>
             """, unsafe_allow_html=True)
             
-            # For this example, we'll just show all images
-            filtered_images = st.session_state.processed_data['images']
-            
-            # Create responsive grid with 3 columns
-            image_cols = st.columns(3)
-            
-            for idx, img_data in enumerate(filtered_images):
-                with image_cols[idx % 3]:
-                    type_display = img_data['type']
-                    status_tag = "warning-tag" if type_display in ['Non classifié', 'Erreur de classification', 'Erreur de traitement'] else "success-tag"
-                    status_icon = "⚠️" if status_tag == "warning-tag" else "✅"
-                    
-                    st.markdown(f"""
-                    <div class="document-card">
-                        <img src="data:image/png;base64,{img_data['image']}" class="document-image" alt="Document image" />
-                        <div class="document-content">
-                            <div class="document-title">
-                                <span>{type_display}</span>
-                                <span class="{status_tag}">{status_icon} {status_tag.split('-')[0].capitalize()}</span>
+            if images:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    with st.container():
+                        st.markdown('<div class="data-card">', unsafe_allow_html=True)
+                        st.markdown("<h4 style='margin-top:0;'>Types de documents</h4>", unsafe_allow_html=True)
+                        
+                        doc_types = {}
+                        for img in images:
+                            doc_type = img.get('type', 'Inconnu')
+                            doc_types[doc_type] = doc_types.get(doc_type, 0) + 1
+                        
+                        if doc_types:
+                            fig = px.pie(
+                                names=list(doc_types.keys()),
+                                values=list(doc_types.values()),
+                                hole=0.4,
+                                color_discrete_sequence=['#3f51b5', '#f44336', '#4caf50', '#ff9800', '#9c27b0']
+                            )
+                            fig.update_layout(
+                                margin=dict(t=0, b=0, l=0, r=0),
+                                height=300,
+                                showlegend=True,
+                                legend=dict(orientation='h', y=-0.2)
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info("Pas assez de données pour créer une visualisation")
+                        
+                        st.markdown('</div>', unsafe_allow_html=True)
+                
+                with col2:
+                    with st.container():
+                        st.markdown('<div class="data-card">', unsafe_allow_html=True)
+                        st.markdown("<h4 style='margin-top:0;'>Statut du traitement</h4>", unsafe_allow_html=True)
+                        
+                        if total_documents > 0:
+                            st.markdown(f"""
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width:{success_rate}%;"></div>
+                                </div>
                             </div>
-                            <div class="document-info">
-                                <span class="info-label">Numéro de série:</span>
-                                <span>{img_data.get('serial', 'N/D')}</span>
-                                <span class="info-label">Date:</span>
-                                <span>{img_data.get('date', 'N/D')}</span>
+                            <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#666;">
+                                <span>0%</span>
+                                <span>{success_rate}% Complété</span>
+                                <span>100%</span>
                             </div>
-                            <div class="document-actions">
-                                <button class="action-button">
-                                    <span>👁️</span> Détails
-                                </button>
-                                <button class="action-button">
-                                    <span>📋</span> Exporter
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-        else:
+                            """, unsafe_allow_html=True)
+                            
+                            status_data = pd.DataFrame({
+                                'Status': ['Traités', 'Erreurs'],
+                                'Count': [classified_docs, error_docs]
+                            })
+                            
+                            fig = px.bar(
+                                status_data,
+                                x='Status',
+                                y='Count',
+                                color='Status',
+                                color_discrete_map={'Traités': '#4caf50', 'Erreurs': '#f44336'}
+                            )
+                            fig.update_layout(
+                                margin=dict(t=20, b=40, l=40, r=20),
+                                height=240,
+                                showlegend=False
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info("Aucun document n'a été traité pour l'analyse")
+                        
+                        st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div class="empty-state">
+                    <p>Aucune donnée disponible pour la visualisation</p>
+                    <p style="font-size:0.85rem; margin-top:0.5rem;">Veuillez traiter des documents pour générer des visualisations</p>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        with tab_images:
             st.markdown("""
-            <div class="empty-state">
-                <p>Aucune image n'a été traitée</p>
-                <p style="font-size:0.85rem; margin-top:0.5rem;">Veuillez charger et traiter des documents pour visualiser les résultats</p>
+            <div class="section-header">
+                <span>🖼️ Images traitées</span>
             </div>
             """, unsafe_allow_html=True)
-        
-        # Add JavaScript for tab functionality
-        st.markdown("""
-        <script>
-        // This is where tab switching JavaScript would go in a real application
-        // Note: Streamlit's iframe restrictions prevent this from actually working
-        </script>
-        """, unsafe_allow_html=True)
+            
+            # Ensure we have the images from session state
+            images = st.session_state.processed_data.get('images', [])
+            
+            if images:
+                # Create responsive grid with 3 columns
+                cols = st.columns(3)
+                for idx, img_data in enumerate(images):
+                    with cols[idx % 3]:
+                        # Display image directly
+                        st.image(img_data['image'], use_container_width=True)
+                        
+                        # Customize display based on image type
+                        type_display = img_data.get('type', 'Inconnu')
+                        if type_display in ['Non classifié', 'Erreur de classification', 'Erreur de traitement']:
+                            type_display = f"{type_display} ⚠️"
+                        else:
+                            type_display = f"{type_display} ✅"
+                        
+                        # Metadata display
+                        st.markdown(
+                            f"""
+                            **Type:** {type_display}  
+                            **Numéro de série:** {img_data.get('serial', 'N/A')}  
+                            **Date:** {img_data.get('date', 'N/A')}
+                            """,
+                            unsafe_allow_html=True
+                        )
+            else:
+                st.info("Aucune image n'a été traitée")
 
     with tab3:
         # Import datetime at the top level of the tab3 block
