@@ -131,38 +131,49 @@ def get_dae_field(aed: Dict, field_g5: str, field_other: str) -> Optional[str]:
     return aed.get(field_g5 if is_g5 else field_other)
 
 def compare_battery_level(rvd: Dict, aed: Dict) -> Dict:
-    """Compare battery levels from RVD and AED"""
+    """Compare battery levels from RVD and AED with improved error handling and data validation."""
     result = {'match': False}
     
     try:
+        # Extract RVD battery level
         rvd_batt_str = rvd.get('Niveau de charge de la batterie en %')
-        if not rvd_batt_str or rvd_batt_str == NA:
+        if not rvd_batt_str or rvd_batt_str == "Non trouvé":
             result['error'] = "Missing RVD battery data"
             return result
-            
-        rvd_batt = float(rvd_batt_str)
+        
+        # Clean and convert RVD battery level to float
+        rvd_batt_cleaned = re.sub(r'[^\d.]', '', rvd_batt_str)
+        if not rvd_batt_cleaned:
+            result['error'] = "Invalid RVD battery level format"
+            return result
+        
+        rvd_batt = float(rvd_batt_cleaned)
         result['rvd'] = f"{rvd_batt}%"
         
+        # Extract AED battery level based on device type
         is_g5 = st.session_state.get('dae_type') == G5_TYPE
         aed_batt_text = aed.get(
             'Capacité restante de la batterie' if is_g5 else 'Capacité restante de la batterie 12V'
         )
         
-        if not aed_batt_text or aed_batt_text == NA:
+        if not aed_batt_text or aed_batt_text == "Non trouvé":
             result['error'] = "Missing AED battery data"
             return result
-            
-        match = BATTERY_LEVEL_PATTERN.search(aed_batt_text)
-        if not match:
+        
+        # Clean and convert AED battery level to float
+        aed_batt_match = BATTERY_LEVEL_PATTERN.search(aed_batt_text)
+        if not aed_batt_match:
             result['error'] = "Cannot extract battery level from AED data"
             return result
-            
-        aed_batt = float(match.group())
+        
+        aed_batt = float(aed_batt_match.group())
         result['aed'] = f"{aed_batt}%"
+        
+        # Compare battery levels with a tolerance of ±2%
         result['match'] = abs(rvd_batt - aed_batt) <= 2
         
     except Exception as e:
-        result['error'] = str(e)
+        result['error'] = f"Unexpected error: {str(e)}"
     
     return result
 

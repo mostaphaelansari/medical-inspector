@@ -261,15 +261,21 @@ def display_field_card(field_name: str, data: Dict[str, Any]) -> None:
     """
     display_name = field_name.replace('_', ' ').title()
     
-    # Define data sources with labels, icons, and colors
-    data_sources = {
-        "RVD Original": {'key': 'rvd_original', 'icon': '📄', 'color': '#6c757d'},
-        "RVD Relevé": {'key': 'rvd_releve', 'icon': '📋', 'color': '#007bff'},
-        "AED": {'key': 'aed', 'icon': '🔌', 'color': '#28a745'},
-        "Image": {'key': 'image', 'icon': '📷', 'color': '#6610f2'}
-    }
-    
-    # Always show the card, even with minimal or no data
+    # Custom data sources for battery level
+    if field_name == 'battery_level':
+        data_sources = {
+            "RVD": {'key': 'rvd', 'icon': '🔋', 'color': '#6c757d'},
+            "AED": {'key': 'aed', 'icon': '🔌', 'color': '#28a745'}
+        }
+    else:
+        # Default data sources for other fields
+        data_sources = {
+            "RVD Original": {'key': 'rvd_original', 'icon': '📄', 'color': '#6c757d'},
+            "RVD Relevé": {'key': 'rvd_releve', 'icon': '📋', 'color': '#007bff'},
+            "AED": {'key': 'aed', 'icon': '🔌', 'color': '#28a745'},
+            "Image": {'key': 'image', 'icon': '📷', 'color': '#6610f2'}
+        }
+
     # Card container
     st.markdown(f"""
     <div class="comparison-card" style="background-color: #ffffff;">
@@ -278,79 +284,92 @@ def display_field_card(field_name: str, data: Dict[str, Any]) -> None:
     </div>
     """, unsafe_allow_html=True)
     
-    # Extract values
+    # Extract values with special handling for battery level
     values = {}
-    valid_values = 0
     for label, source_info in data_sources.items():
         value = data.get(source_info['key'], None)
+        
+        # Format battery percentage specifically
+        if field_name == 'battery_level' and value not in [None, 'N/A', '-']:
+            if isinstance(value, str) and '%' not in value:
+                value = f"{value}%"
+        
         values[label] = {
             'value': value if value is not None else '-',
             'icon': source_info['icon'],
             'color': source_info['color']
         }
-        if value is not None and value != 'N/A' and value != '-':
-            valid_values += 1
-    
+
     # Data source comparison
     source_cols = st.columns(len(data_sources))
     for i, (label, info) in enumerate(values.items()):
         with source_cols[i]:
             value_display = info['value'] if info['value'] not in [None, 'N/A', '-'] else '-'
             
+            # Special styling for battery level
+            battery_style = ""
+            if field_name == 'battery_level' and '%' in str(value_display):
+                battery_style = "font-weight: 700; color: #2e7d32;" if data.get('match', False) \
+                    else "font-weight: 700; color: #d32f2f;"
+            
             st.markdown(f"""
-            <div style="padding: 0.5rem; border-left: 3px solid {info['color']}; background-color: #f8f9fa; height: 100%;">
+            <div style="padding: 0.5rem; border-left: 3px solid {info['color']}; 
+                background-color: #f8f9fa; height: 100%;">
                 <p style="margin: 0; font-weight: 600; color: {info['color']};">
                     {info['icon']} {label}
                 </p>
-                <div class="data-value" style="margin-top: 0.5rem; width: 100%;">
+                <div class="data-value" style="margin-top: 0.5rem; width: 100%; {battery_style}">
                     {value_display}
                 </div>
             </div>
             """, unsafe_allow_html=True)
-    
-    # Check for match information
-    match_keys = [k for k in data.keys() if k.startswith('match_')]
-    
-    # Always show match status, even if no matches
-    if match_keys:
-        matches = sum(1 for k in match_keys if data.get(k, False))
-        match_percentage = (matches / len(match_keys)) * 100
-        
-        # Show match status with column layout
-        cols = st.columns([7, 3])
-        
-        with cols[0]:
-            # Create a more visually appealing progress bar
-            color = get_match_color(match_percentage)
-            st.markdown(f"""
-            <div style="background-color: #e9ecef; border-radius: 5px; height: 10px; width: 100%; margin-top: 0.5rem;">
-                <div style="background-color: {color}; width: {match_percentage}%; height: 100%; border-radius: 5px;"></div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with cols[1]:
-            # Match status indicator
-            if matches == len(match_keys):
-                st.markdown(f'<p class="match-indicator" style="color:#00cc96; text-align:center;">100% ✅</p>', unsafe_allow_html=True)
-            elif match_percentage >= 50:
-                st.markdown(f'<p class="match-indicator" style="color:#ffa500; text-align:center;">{match_percentage:.0f}% ⚠️</p>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<p class="match-indicator" style="color:#ff4b4b; text-align:center;">{match_percentage:.0f}% ❌</p>', unsafe_allow_html=True)
+
+    # Match status (different presentation for battery level)
+    if field_name == 'battery_level':
+        if 'match' in data:
+            cols = st.columns([7, 3])
+            with cols[0]:
+                color = '#00cc96' if data['match'] else '#ff4b4b'
+                st.markdown(f"""
+                <div style="background-color: #e9ecef; border-radius: 5px; height: 10px; width: 100%; margin-top: 0.5rem;">
+                    <div style="background-color: {color}; width: {'100' if data['match'] else '0'}%; 
+                        height: 100%; border-radius: 5px;"></div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with cols[1]:
+                status = "✅ Match" if data['match'] else "❌ Mismatch"
+                color = '#00cc96' if data['match'] else '#ff4b4b'
+                st.markdown(f'<p class="match-indicator" style="color:{color}; text-align:center;">{status}</p>', 
+                          unsafe_allow_html=True)
     else:
-        # If no match keys exist, show a neutral status
-        cols = st.columns([7, 3])
-        
-        with cols[0]:
-            st.markdown(f"""
-            <div style="background-color: #e9ecef; border-radius: 5px; height: 10px; width: 100%; margin-top: 0.5rem;">
-                <div style="background-color: #6c757d; width: 0%; height: 100%; border-radius: 5px;"></div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with cols[1]:
-            st.markdown(f'<p class="match-indicator" style="color:#6c757d; text-align:center;">N/A 📭</p>', unsafe_allow_html=True)
-    
-    # Handle errors (if any)
+        # Existing match status handling for other fields
+        match_keys = [k for k in data.keys() if k.startswith('match_')]
+        if match_keys:
+            matches = sum(1 for k in match_keys if data.get(k, False))
+            match_percentage = (matches / len(match_keys)) * 100
+            
+            cols = st.columns([7, 3])
+            with cols[0]:
+                color = get_match_color(match_percentage)
+                st.markdown(f"""
+                <div style="background-color: #e9ecef; border-radius: 5px; height: 10px; width: 100%; margin-top: 0.5rem;">
+                    <div style="background-color: {color}; width: {match_percentage}%; height: 100%; border-radius: 5px;"></div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with cols[1]:
+                if matches == len(match_keys):
+                    st.markdown(f'<p class="match-indicator" style="color:#00cc96; text-align:center;">100% ✅</p>', 
+                              unsafe_allow_html=True)
+                elif match_percentage >= 50:
+                    st.markdown(f'<p class="match-indicator" style="color:#ffa500; text-align:center;">{match_percentage:.0f}% ⚠️</p>', 
+                              unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<p class="match-indicator" style="color:#ff4b4b; text-align:center;">{match_percentage:.0f}% ❌</p>', 
+                              unsafe_allow_html=True)
+
+    # Error handling
     if 'errors' in data and data['errors']:
         with st.expander("⚠️ Problèmes Détectés", expanded=False):
             for err in data['errors']:
@@ -367,7 +386,6 @@ def display_field_card(field_name: str, data: Dict[str, Any]) -> None:
         </div>
         """, unsafe_allow_html=True)
     
-    # Add a subtle separator
     st.markdown("<hr style='margin: 1.5rem 0; opacity: 0.2;'>", unsafe_allow_html=True)
 
 def get_match_color(percentage):
