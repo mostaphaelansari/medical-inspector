@@ -167,7 +167,8 @@ def create_summary_metrics(data: Dict[str, Dict]) -> None:
 
 def display_section_card(section_name: str, section_data: Dict[str, Dict]) -> None:
     """
-    Display a section's data in a visually appealing card format.
+    Display a section's data in a visually appealing card format, 
+    ensuring display even if no matches are found.
     
     Args:
         section_name: Name of the section
@@ -176,9 +177,12 @@ def display_section_card(section_name: str, section_data: Dict[str, Dict]) -> No
     display_name = section_name.replace('_', ' ').title()
     
     with st.expander(f"📊 {display_name}", expanded=True):
-        # Calculate section metrics
+        # Initialize metrics
         total_comparisons = 0
         successful_matches = 0
+        
+        # Flag to track if any data was processed
+        data_processed = False
         
         for field, data in section_data.items():
             if isinstance(data, dict):
@@ -192,6 +196,10 @@ def display_section_card(section_name: str, section_data: Dict[str, Dict]) -> No
                         match_keys = [k for k in subdata.keys() if k.startswith('match_')]
                         total_comparisons += len(match_keys)
                         successful_matches += sum(1 for k in match_keys if subdata.get(k, False))
+                        
+                        # Mark that data was processed
+                        if match_keys:
+                            data_processed = True
                 else:
                     display_field_card(field, data)
                     
@@ -199,13 +207,37 @@ def display_section_card(section_name: str, section_data: Dict[str, Dict]) -> No
                     match_keys = [k for k in data.keys() if k.startswith('match_')]
                     total_comparisons += len(match_keys)
                     successful_matches += sum(1 for k in match_keys if data.get(k, False))
+                    
+                    # Mark that data was processed
+                    if match_keys:
+                        data_processed = True
         
-        # Section summary
-        if total_comparisons > 0:
-            match_percentage = (successful_matches / total_comparisons) * 100
+        # Section summary - always displayed
+        st.markdown(f"### Résumé de la Section: {display_name}")
+        
+        # Handle case with no matches or no data processed
+        if total_comparisons == 0 or not data_processed:
+            # Use columns for layout
+            cols = st.columns([3, 1])
+            with cols[0]:
+                # Show empty progress bar
+                st.progress(0)
+            with cols[1]:
+                # Display "No Data" message
+                st.markdown(f'<p style="color:#6c757d; font-weight:bold; text-align:center; font-size:1.2rem;">N/A 📭</p>', unsafe_allow_html=True)
             
-            # Visual progress indicator
-            st.markdown(f"### Résumé de la Section: {display_name}")
+            # Optional: Add an informative message
+            st.markdown("""
+            <div style="background-color: #f8f9fa; border-left: 4px solid #6c757d; padding: 0.75rem; margin: 1rem 0;">
+                <p style="margin: 0; color: #6c757d;">
+                    ℹ️ Aucune donnée n'a été détectée pour cette section. 
+                    Veuillez vérifier les entrées ou les sources de données.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            # Calculate match percentage
+            match_percentage = (successful_matches / total_comparisons) * 100
             
             # Use columns for better layout
             cols = st.columns([3, 1])
@@ -237,6 +269,15 @@ def display_field_card(field_name: str, data: Dict[str, Any]) -> None:
         "Image": {'key': 'image', 'icon': '📷', 'color': '#6610f2'}
     }
     
+    # Always show the card, even with minimal or no data
+    # Card container
+    st.markdown(f"""
+    <div class="comparison-card" style="background-color: #ffffff;">
+        <h4 style="margin-top: 0; color: #333;">{display_name}</h4>
+        <p style="color: #666; font-size: 0.8rem; margin-bottom: 1rem;">Nom technique: {field_name}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
     # Extract values
     values = {}
     valid_values = 0
@@ -250,101 +291,103 @@ def display_field_card(field_name: str, data: Dict[str, Any]) -> None:
         if value is not None and value != 'N/A' and value != '-':
             valid_values += 1
     
-    if valid_values >= 2:
-        # Card container
-        st.markdown(f"""
-        <div class="comparison-card" style="background-color: #ffffff;">
-            <h4 style="margin-top: 0; color: #333;">{display_name}</h4>
-            <p style="color: #666; font-size: 0.8rem; margin-bottom: 1rem;">Nom technique: {field_name}</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Data source comparison
-        source_cols = st.columns(len(data_sources))
-        for i, (label, info) in enumerate(values.items()):
-            with source_cols[i]:
-                value_display = info['value'] if info['value'] not in [None, 'N/A', '-'] else '-'
-                
-                st.markdown(f"""
-                <div style="padding: 0.5rem; border-left: 3px solid {info['color']}; background-color: #f8f9fa; height: 100%;">
-                    <p style="margin: 0; font-weight: 600; color: {info['color']};">
-                        {info['icon']} {label}
-                    </p>
-                    <div class="data-value" style="margin-top: 0.5rem; width: 100%;">
-                        {value_display}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # Calculate and display match status
-        match_keys = [k for k in data.keys() if k.startswith('match_')]
-        if match_keys:
-            matches = sum(1 for k in match_keys if data.get(k, False))
-            match_percentage = (matches / len(match_keys)) * 100
+    # Data source comparison
+    source_cols = st.columns(len(data_sources))
+    for i, (label, info) in enumerate(values.items()):
+        with source_cols[i]:
+            value_display = info['value'] if info['value'] not in [None, 'N/A', '-'] else '-'
             
-            # Show match status with column layout
-            cols = st.columns([7, 3])
-            
-            with cols[0]:
-                # Create a more visually appealing progress bar
-                color = get_match_color(match_percentage)
-                st.markdown(f"""
-                <div style="background-color: #e9ecef; border-radius: 5px; height: 10px; width: 100%; margin-top: 0.5rem;">
-                    <div style="background-color: {color}; width: {match_percentage}%; height: 100%; border-radius: 5px;"></div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with cols[1]:
-                # Match status indicator
-                if matches == len(match_keys):
-                    st.markdown(f'<p class="match-indicator" style="color:#00cc96; text-align:center;">100% ✅</p>', unsafe_allow_html=True)
-                elif match_percentage >= 50:
-                    st.markdown(f'<p class="match-indicator" style="color:#ffa500; text-align:center;">{match_percentage:.0f}% ⚠️</p>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<p class="match-indicator" style="color:#ff4b4b; text-align:center;">{match_percentage:.0f}% ❌</p>', unsafe_allow_html=True)
-        
-        # Display errors with improved formatting
-        if 'errors' in data and data['errors']:
-            with st.expander("⚠️ Problèmes Détectés", expanded=False):
-                for err in data['errors']:
-                    st.markdown(f"""
-                    <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 0.75rem; margin-bottom: 0.5rem;">
-                        <p style="margin: 0; color: #856404;">• {err}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-        
-        if 'error' in data and data['error']:
             st.markdown(f"""
-            <div style="background-color: #f8d7da; border-left: 4px solid #dc3545; padding: 0.75rem; margin: 1rem 0;">
-                <p style="margin: 0; color: #721c24;"><strong>🚫 Erreur critique:</strong> {data['error']}</p>
+            <div style="padding: 0.5rem; border-left: 3px solid {info['color']}; background-color: #f8f9fa; height: 100%;">
+                <p style="margin: 0; font-weight: 600; color: {info['color']};">
+                    {info['icon']} {label}
+                </p>
+                <div class="data-value" style="margin-top: 0.5rem; width: 100%;">
+                    {value_display}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Check for match information
+    match_keys = [k for k in data.keys() if k.startswith('match_')]
+    
+    # Always show match status, even if no matches
+    if match_keys:
+        matches = sum(1 for k in match_keys if data.get(k, False))
+        match_percentage = (matches / len(match_keys)) * 100
+        
+        # Show match status with column layout
+        cols = st.columns([7, 3])
+        
+        with cols[0]:
+            # Create a more visually appealing progress bar
+            color = get_match_color(match_percentage)
+            st.markdown(f"""
+            <div style="background-color: #e9ecef; border-radius: 5px; height: 10px; width: 100%; margin-top: 0.5rem;">
+                <div style="background-color: {color}; width: {match_percentage}%; height: 100%; border-radius: 5px;"></div>
             </div>
             """, unsafe_allow_html=True)
         
-        # Add a subtle separator
-        st.markdown("<hr style='margin: 1.5rem 0; opacity: 0.2;'>", unsafe_allow_html=True)
+        with cols[1]:
+            # Match status indicator
+            if matches == len(match_keys):
+                st.markdown(f'<p class="match-indicator" style="color:#00cc96; text-align:center;">100% ✅</p>', unsafe_allow_html=True)
+            elif match_percentage >= 50:
+                st.markdown(f'<p class="match-indicator" style="color:#ffa500; text-align:center;">{match_percentage:.0f}% ⚠️</p>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<p class="match-indicator" style="color:#ff4b4b; text-align:center;">{match_percentage:.0f}% ❌</p>', unsafe_allow_html=True)
+    else:
+        # If no match keys exist, show a neutral status
+        cols = st.columns([7, 3])
+        
+        with cols[0]:
+            st.markdown(f"""
+            <div style="background-color: #e9ecef; border-radius: 5px; height: 10px; width: 100%; margin-top: 0.5rem;">
+                <div style="background-color: #6c757d; width: 0%; height: 100%; border-radius: 5px;"></div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with cols[1]:
+            st.markdown(f'<p class="match-indicator" style="color:#6c757d; text-align:center;">N/A 📭</p>', unsafe_allow_html=True)
+    
+    # Handle errors (if any)
+    if 'errors' in data and data['errors']:
+        with st.expander("⚠️ Problèmes Détectés", expanded=False):
+            for err in data['errors']:
+                st.markdown(f"""
+                <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 0.75rem; margin-bottom: 0.5rem;">
+                    <p style="margin: 0; color: #856404;">• {err}</p>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    if 'error' in data and data['error']:
+        st.markdown(f"""
+        <div style="background-color: #f8d7da; border-left: 4px solid #dc3545; padding: 0.75rem; margin: 1rem 0;">
+            <p style="margin: 0; color: #721c24;"><strong>🚫 Erreur critique:</strong> {data['error']}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Add a subtle separator
+    st.markdown("<hr style='margin: 1.5rem 0; opacity: 0.2;'>", unsafe_allow_html=True)
 
-def get_match_color(percentage: float) -> str:
+def get_match_color(percentage):
     """
-    Generate a color on a gradient from red to green based on percentage.
+    Determine color based on match percentage.
     
     Args:
-        percentage: Match percentage (0-100)
-        
-    Returns:
-        Hex color code
-    """
-    if percentage <= 50:
-        # Red to yellow gradient for 0-50%
-        r = 255
-        g = int((percentage / 50) * 255)
-        b = 0
-    else:
-        # Yellow to green gradient for 50-100%
-        r = int(255 - ((percentage - 50) / 50) * 255)
-        g = 255
-        b = 0
+        percentage: Match percentage
     
-    return f"#{r:02x}{g:02x}{b:02x}"
+    Returns:
+        Color code for the progress bar
+    """
+    if percentage == 100:
+        return '#00cc96'  # Green for perfect match
+    elif percentage >= 75:
+        return '#ffa500'  # Orange for good match
+    elif percentage >= 50:
+        return '#ff7f50'  # Coral for partial match
+    else:
+        return '#ff4b4b'  # Red for poor match
 
 # Sample usage
 if __name__ == "__main__":
