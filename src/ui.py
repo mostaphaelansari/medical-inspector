@@ -1047,16 +1047,16 @@ def render_ui(client, reader):
                     <span>📄 Données RVD</span>
                 </div>
                 """, unsafe_allow_html=True)
-                
+            
                 rvd_data = processed_data.get('RVD', {})
                 if rvd_data:
                     with st.container():
                         st.markdown('<div class="data-card">', unsafe_allow_html=True)
-                        
+                    
                         # JSON viewer
                         with st.expander("Voir JSON complet", expanded=False):
                             st.json(rvd_data)
-                        
+                    
                         # Display key metrics
                         if isinstance(rvd_data, dict):
                             cols = st.columns(2)
@@ -1065,8 +1065,13 @@ def render_ui(client, reader):
                                 with cols[i % 2]:
                                     if key in rvd_data:
                                         st.metric(label=key.capitalize(), value=rvd_data[key])
-                        
+                    
                         st.markdown('</div>', unsafe_allow_html=True)
+                        #Changement de consommable
+                        changement = ["Changement batterie", "Changement électrodes adultes", "Changement électrodes pédiatriques"]
+                        for i in changement:
+                            if rvd_data.get(i) == "Oui":
+                                st.toast(f"{i}",icon = "⚠️")
                 else:
                     st.markdown("""
                     <div class="empty-state">
