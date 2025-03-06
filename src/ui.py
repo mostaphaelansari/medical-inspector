@@ -1370,10 +1370,11 @@ def render_ui(client, reader):
             <div style="background-color: #e2e3e5; border-radius: 5px; padding: 1rem; margin-top: 1.5rem;">
                 <h3 style="color: #383d41; margin-top: 0;">Actions recommandées:</h3>
                 <ul style="color: #383d41;">
-                    <li>Vérifiez les données dans le Relevé de Visite Défibrillateur (RVD)</li>
+                    <li>Vérifiez les données dans le Rapport de vérification (RVD)</li>
                     <li>Assurez-vous que les informations de l'appareil (AED) sont correctement enregistrées</li>
                     <li>Vérifiez la qualité et la lisibilité des images capturées</li>
                     <li>Corrigez les erreurs identifiées et relancez la comparaison</li>
+                    <li>Valider le rapport dans Zoho </li>
                 </ul>
             </div>
             """, unsafe_allow_html=True)
