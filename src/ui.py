@@ -373,15 +373,16 @@ def display_field_card(field_name: str, data: Dict[str, Any]) -> None:
                     st.markdown(f'<p class="match-indicator" style="color:#ff4b4b; text-align:center;">{match_percentage:.0f}% ❌</p>', 
                               unsafe_allow_html=True)
 
-    # Error handling
+    # Error handling - FIXED to avoid nested expanders
     if 'errors' in data and data['errors']:
-        with st.expander("⚠️ Problèmes Détectés", expanded=False):
-            for err in data['errors']:
-                st.markdown(f"""
-                <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 0.75rem; margin-bottom: 0.5rem;">
-                    <p style="margin: 0; color: #856404;">• {err}</p>
-                </div>
-                """, unsafe_allow_html=True)
+        st.markdown("<p style='font-weight: bold; color: #856404; margin-top: 0.75rem;'>⚠️ Problèmes Détectés:</p>", 
+                   unsafe_allow_html=True)
+        for err in data['errors']:
+            st.markdown(f"""
+            <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 0.75rem; margin-bottom: 0.5rem;">
+                <p style="margin: 0; color: #856404;">• {err}</p>
+            </div>
+            """, unsafe_allow_html=True)
     
     if 'error' in data and data['error']:
         st.markdown(f"""
@@ -411,6 +412,56 @@ def get_match_color(percentage):
     else:
         return '#ff4b4b'  # Red for poor match
 
+# Sample usage
+if __name__ == "__main__":
+    st.set_page_config(
+        page_title="Rapport de Comparaison",
+        page_icon="📊",
+        layout="wide"
+    )
+    
+    # Demo data structure
+    sample_data = {
+        "informations_generales": {
+            "model": {
+                "rvd_original": "Zoll AED Plus",
+                "rvd_releve": "Zoll AED Plus",
+                "aed": "Zoll AED Plus",
+                "image": "Zoll AED Plus",
+                "match_rvd_aed": True,
+                "match_rvd_image": True
+            },
+            "serial_number": {
+                "rvd_original": "X12345678",
+                "rvd_releve": "X12345678",
+                "aed": "X12345678",
+                "image": None,
+                "match_rvd_aed": True,
+                "errors": ["Numéro de série non visible sur l'image"]
+            }
+        },
+        "electrodes": {
+            "adultes": {
+                "model": {
+                    "rvd_original": "CPR-D-padz",
+                    "rvd_releve": "CPR-D-padz",
+                    "aed": "CPR-D",
+                    "image": "CPR-D-padz",
+                    "match_rvd_aed": False,
+                    "match_rvd_image": True,
+                    "errors": ["Discordance entre le modèle RVD et AED"]
+                },
+                "expiry_date": {
+                    "rvd_original": "2025-06-30",
+                    "rvd_releve": "2025-06-30",
+                    "aed": "2025-06-30",
+                    "image": "2025-06-30",
+                    "match_rvd_aed": True,
+                    "match_rvd_image": True
+                }
+            }
+        }
+    }
 # Sample usage
 if __name__ == "__main__":
     st.set_page_config(
