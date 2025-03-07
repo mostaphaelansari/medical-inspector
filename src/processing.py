@@ -10,7 +10,7 @@ import pdfplumber
 import streamlit as st
 from PIL import Image, ImageEnhance, ImageFilter, ExifTags
 from .config import MODEL_ID
-from .extraction import extract_rvd_data
+from .extraction import extract_rvd_data 
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -100,47 +100,45 @@ def extract_text_from_pdf(uploaded_file) -> str:
 
 
 
-def process_pdf_file(
-    uploaded_file, 
-    error_container
-) -> None:
+def process_pdf_file(uploaded_file, error_container) -> None:
     """Process a PDF file based on its type.
-    
+   
     Args:
         uploaded_file: The PDF file to process
         error_container: Streamlit container for errors
     """
     text = extract_text_from_pdf(uploaded_file)
     filename_lower = uploaded_file.name.lower()
-    
+   
     # Process RVD documents
     if is_rvd_document(uploaded_file.name, text):
         try:
             # Import here to avoid circular imports
-            
+           
             st.session_state.processed_data['RVD'] = extract_rvd_data(text)
             st.success(f"RVD traité : {uploaded_file.name}")
         except Exception as e:
             error_container.error(f"Erreur lors du traitement RVD : {uploaded_file.name} - {e}")
             logger.error("RVD processing error: %s", e)
-            
+           
     # Process AED documents
     elif 'aed' in filename_lower:
         try:
             # Import here to avoid circular imports
             from .extraction import extract_aed_g5_data, extract_aed_g3_data
             aed_type = st.session_state.dae_type
-            
+           
             if aed_type == "G5":
+                # Corrected this line - was using square brackets instead of curly braces
                 st.session_state.processed_data['AEDG5'] = extract_aed_g5_data(text)
             else:
                 st.session_state.processed_data['AEDG3'] = extract_aed_g3_data(text)
-                
+               
             st.success(f"Rapport AED {aed_type} traité : {uploaded_file.name}")
         except Exception as e:
             error_container.error(f"Erreur lors du traitement AED : {uploaded_file.name} - {e}")
             logger.error("AED processing error: %s", e)
-            
+           
     # Unrecognized PDF type
     else:
         st.warning(f"Type de PDF non reconnu : {uploaded_file.name}")

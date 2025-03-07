@@ -1,6 +1,7 @@
 """Data extraction functions for the Comparateur_PDF project."""
 
 import re
+
 from typing import Dict, List, Tuple, Optional
 from PIL import Image, ImageEnhance, ImageFilter
 from pyzbar.pyzbar import decode
@@ -25,7 +26,7 @@ def extract_rvd_data(text: str) -> Dict[str, str]:
     keywords = [
         "Commentaire fin d'intervention et recommandations",
         "Date-Heure rapport vérification défibrillateur",
-        "Code Site",
+        "Code du site",
         #Défibrillateur
         "Numéro de série DEFIBRILLATEUR",
         "Numéro de série relevé",
@@ -116,14 +117,17 @@ def _get_next_valid_line(lines: List[str], start_idx: int, keyword: str) -> str:
         j += 1
     return "Non trouvé"
 
-def extract_aed_g5_data(text: str) -> Dict[str, str]:
-    """Extract relevant data from AED G5 text.
 
+
+def extract_aed_g5_data(text: str) -> Dict[str, any]:
+    """Extract relevant data and errors from AED G5 text.
+    
     Args:
         text: Text extracted from the AED G5 PDF.
-
+    
     Returns:
-        Extracted data with keywords as keys.
+        Dictionary containing both extracted data with keywords as keys
+        and a list of errors under the 'errors' key.
     """
     keywords = [
         "N° série DAE",
@@ -132,12 +136,28 @@ def extract_aed_g5_data(text: str) -> Dict[str, str]:
         "Rapport DAE - Erreurs en cours",
         "Date / Heure:",
     ]
+    
     results = {}
+    
+    # Extract keyword data
     for keyword in keywords:
         pattern = re.compile(re.escape(keyword) + r"[\s:]*([^\n]*)")
         match = pattern.search(text)
         if match:
             results[keyword] = match.group(1).strip()
+    
+    # Extract errors
+    errors = re.findall(r"(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})\s+(0x[0-9A-Fa-f]+)", text)
+    results["errors"] = errors
+    
+    # Print error information
+    if errors:
+        print("Errors found:")
+        for error in errors:
+            print(f"Date/Time: {error[0]}, Error ID: {error[1]}")
+    else:
+        print("No errors found in the section.")
+    
     return results
 
 def extract_aed_g3_data(text: str) -> Dict[str, str]:
@@ -285,3 +305,6 @@ def extract_important_info_electrodes(image: Image.Image) -> Tuple[Optional[str]
     except ValueError as e:
         st.error(f"Erreur de valeur lors du traitement de l'image : {e}")
         return None, None
+
+
+

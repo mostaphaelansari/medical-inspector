@@ -1,18 +1,22 @@
 """Streamlit UI components for the Comparateur_PDF project."""
 
+import base64
 import json
 import os
-from datetime import datetime
-from tkinter import Tk, filedialog
 import zipfile
-import plotly.express as px  # Add this import at the top of your file
-import pandas as pd
-import altair as alt
-from PIL import Image
-import base64
+import tempfile   
+from datetime import datetime
 from io import BytesIO
-from typing import Dict, Any
+from typing import Any, Dict
+from tkinter import Tk, filedialog
+
+import altair as alt
+import pandas as pd
+import plotly.express as px
 import streamlit as st
+from PIL import Image
+
+
 from .config import ALLOWED_EXTENSIONS, CSS_STYLE
 from .processing import process_uploaded_file
 from .comparison import compare_data
@@ -1240,7 +1244,7 @@ def render_ui(client, reader):
 
     with tab3:
         # Import datetime at the top level of the tab3 block
-        from datetime import datetime
+        
         
         st.markdown("""
         <div style="text-align: center; margin-bottom: 2rem;">
@@ -1379,14 +1383,7 @@ def render_ui(client, reader):
             </div>
             """, unsafe_allow_html=True)
             
-            # Add download report option
-            st.download_button(
-                label="📥 Télécharger le rapport détaillé",
-                data="Rapport détaillé des incohérences",  # This would be generated data in your actual implementation
-                file_name="rapport_validation.txt",
-                mime="text/plain",
-                key="download-report"
-            )
+            
         
         # Add a timestamp and signature
         st.markdown(f"""
@@ -1397,65 +1394,119 @@ def render_ui(client, reader):
 
 
 
-            
+
+     
 
     with tab4:
         st.title("📤 Export automatisé")
         with st.container():
             col_config, col_preview = st.columns([1, 2])
-            
+        
             with col_config:
                 with st.form("export_config"):
                     st.markdown("#### ⚙️ Paramètres d'export")
                     include_images = st.checkbox("Inclure les images", True)
                     st.markdown("---")
-                    
+                
                     if st.form_submit_button("Générer un package d'export"):
                         if not st.session_state.get('processed_data', {}).get('RVD'):
                             st.warning("Aucune donnée RVD disponible pour le nommage")
                             st.stop()
-
                         try:
-                            code_site = st.session_state.processed_data['RVD'].get('Code site', 'INCONNU')
+                            code_site = st.session_state.processed_data['RVD'].get('Code du site', 'INCONNU')
                             date_str = datetime.now().strftime("%Y%m%d")
                             
-                            # Process PDF files
-                            if 'uploaded_files' in st.session_state:
-                                for file in st.session_state.uploaded_files:
-                                    if file.type == "application/pdf":
-                                        # Generate default name
-                                        if 'rapport de vérification' in file.name.lower():
-                                            default_name = f"RVD_{code_site}_{date_str}.pdf"
-                                        else:
-                                            default_name = f"AED_{st.session_state.dae_type}_{code_site}_{date_str}.pdf"
-                                        
-                                        # Open save dialog
-                                        save_path = save_file_dialog(default_name)
-                                        
-                                        if save_path:  # If user didn't cancel
-                                            with open(save_path, "wb") as f:
+                            # Create a temporary directory to store files for zipping
+                            with tempfile.TemporaryDirectory() as temp_dir:
+                                exported_files = []
+                                
+                                # Process uploaded files
+                                if 'uploaded_files' in st.session_state:
+                                    for file in st.session_state.uploaded_files:
+                                        # Handle PDFs
+                                        if file.type == "application/pdf":
+                                            # Generate appropriate file name based on content
+                                            if 'rapport de vérification' in file.name.lower():
+                                                file_name = f"RVD_{code_site}_{date_str}.pdf"
+                                            else:
+                                                file_name = f"AED_{st.session_state.dae_type}_{code_site}_{date_str}.pdf"
+                                            
+                                            file_path = os.path.join(temp_dir, file_name)
+                                            with open(file_path, "wb") as f:
                                                 f.write(file.getvalue())
-                                            st.success(f"Fichier enregistré : {os.path.basename(save_path)}")
+                                            exported_files.append(file_name)
+                                        
+                                        # Process images if included
+                                        if include_images and file.type.startswith("image/"):
+                                            # Clean original filename to avoid special characters
+                                            clean_name = ''.join(c if c.isalnum() or c in ['.', '_', '-'] else '_' for c in file.name)
+                                            file_name = f"LCC_{code_site}_{date_str}_{clean_name}"
+                                            file_path = os.path.join(temp_dir, file_name)
+                                            with open(file_path, "wb") as f:
+                                                f.write(file.getvalue())
+                                            exported_files.append(file_name)
+                                
+                                # Create zip file if we have files to export
+                                if exported_files:
+                                    # Create a zip file
+                                    zip_filename = f"Export_{code_site}_{date_str}.zip"
+                                    zip_path = os.path.join(temp_dir, zip_filename)
                                     
-                                    # Process images if included
-                                    if include_images and file.type.startswith("image/"):
-                                        default_name = f"IMAGE_{code_site}_{date_str}_{file.name}"
-                                        save_path = save_file_dialog(default_name)
+                                    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                                        for file in exported_files:
+                                            zipf.write(os.path.join(temp_dir, file), arcname=file)
+                                    
+                                    # Use Streamlit to allow user to download the zip
+                                    with open(zip_path, "rb") as f:
+                                        zip_data = f.read()
+                                    
+                                    # Display download button in the preview column
+                                    with col_preview:
+                                        st.success(f"Package d'export créé avec {len(exported_files)} fichiers")
+                                        st.download_button(
+                                            label="📥 Télécharger le package d'export",
+                                            data=zip_data,
+                                            file_name=zip_filename,
+                                            mime="application/zip",
+                                            key="download_zip",
+                                            help="Télécharge un fichier ZIP contenant tous les documents"
+                                        )
                                         
-                                        if save_path:  # If user didn't cancel
-                                            with open(save_path, "wb") as f:
-                                                f.write(file.getvalue())
-                                            st.success(f"Image enregistrée : {os.path.basename(save_path)}")
-
+                                        # Show list of included files with icons
+                                        st.markdown("#### 📋 Fichiers inclus dans le package :")
+                                        for file in exported_files:
+                                            if file.endswith('.pdf'):
+                                                icon = "📄"
+                                            elif file.endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                                                icon = "🖼️"
+                                            else:
+                                                icon = "📁"
+                                            st.write(f"{icon} {file}")
+                                else:
+                                    with col_preview:
+                                        st.warning("Aucun fichier à exporter")
+                                    
                         except Exception as e:
-                            st.error(f"Erreur lors de l'enregistrement : {str(e)}")
+                            st.error(f"Erreur lors de la création du package : {str(e)}")
+                            st.exception(e)  # Show detailed error traceback in development
 
             with col_preview:
                 st.markdown("#### 👁️ Aperçu des fichiers")
                 if 'uploaded_files' in st.session_state:
                     file_list = []
+                    pdf_count = 0
+                    image_count = 0
+                    
                     for file in st.session_state.uploaded_files:
-                        file_type = "PDF" if file.type == "application/pdf" else "Image"
+                        if file.type == "application/pdf":
+                            file_type = "📄 PDF"
+                            pdf_count += 1
+                        elif file.type.startswith("image/"):
+                            file_type = "🖼️ Image"
+                            image_count += 1
+                        else:
+                            file_type = "📁 Autre"
+                        
                         file_list.append({
                             "Type": file_type,
                             "Nom original": file.name,
@@ -1463,12 +1514,29 @@ def render_ui(client, reader):
                         })
                     
                     if file_list:
-                        st.table(file_list)
+                        # Show summary stats
+                        st.markdown(f"""
+                        **Résumé des fichiers :**
+                        - Total: {len(file_list)} fichier(s)
+                        - PDF: {pdf_count} fichier(s)
+                        - Images: {image_count} fichier(s)
+                        """)
+                        
+                        # Show detailed table
+                        st.dataframe(
+                            file_list,
+                            column_config={
+                                "Type": st.column_config.TextColumn("Type"),
+                                "Nom original": st.column_config.TextColumn("Nom original"),
+                                "Taille": st.column_config.TextColumn("Taille")
+                            },
+                            hide_index=True
+                        )
                     else:
                         st.info("Aucun fichier disponible pour l'export")
                 else:
                     st.markdown("""
-                        <div style="opacity:0.5; text-align:center; padding:2rem;">
+                        <div style="opacity:0.5; text-align:center; padding:2rem; border:1px dashed #ccc; border-radius:5px;">
                             ⚠️ Aucun fichier uploadé
                         </div>
                     """, unsafe_allow_html=True)

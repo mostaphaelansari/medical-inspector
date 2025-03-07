@@ -1,8 +1,11 @@
-from typing import Dict, List, Tuple, Optional, Callable, Any
 import re
-import streamlit as st
 from datetime import datetime
+
+import streamlit as st
+
 from .utils import normalize_serial
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
 
 # Precompiled regex patterns for better performance
 DATE_PATTERN = re.compile(r'(\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{2,4}[-/]\d{1,2}[-/]?\d{0,2}|\d{1,2}[-/]\d{4})')
@@ -316,3 +319,5 @@ def compare_data() -> Dict[str, Dict[str, Dict]]:
     
     st.session_state.processed_data['comparisons'] = results
     return results
+
+
