@@ -1123,6 +1123,26 @@ def render_ui(client, reader):
             font-size: 0.8rem;
             color: #666;
         }
+
+        /* Error styling */
+        .error-time {
+            font-size: 0.9em;
+            color: #666;
+            padding: 8px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            margin: 4px 0;
+        }
+
+        .error-code {
+            font-weight: bold;
+            color: #dc3545;
+            padding: 8px;
+            background-color: #ffeef0;
+            border-radius: 5px;
+            margin: 4px 0;
+            text-align: center;
+        }
         </style>
         """, unsafe_allow_html=True)
         
@@ -1239,11 +1259,11 @@ def render_ui(client, reader):
                     with st.container():
                         st.markdown('<div class="data-card">', unsafe_allow_html=True)
                         
-                        # Keep the JSON viewer for complete data access
+                        # Existing JSON viewer
                         with st.expander("Voir JSON complet", expanded=False):
                             st.json(aed_data)
                         
-                        # Display key metrics at the top
+                        # Key metrics display
                         if isinstance(aed_data, dict):
                             cols = st.columns(2)
                             metric_keys = ['date', 'serial', 'id', 'status']
@@ -1252,7 +1272,7 @@ def render_ui(client, reader):
                                     if key in aed_data:
                                         st.metric(label=key.capitalize(), value=aed_data[key])
                             
-                            # Convert flat data to DataFrame for better display
+                            # Flat data display
                             flat_data = {k: v for k, v in aed_data.items() 
                                         if not isinstance(v, (dict, list)) and k not in metric_keys}
                             
@@ -1265,10 +1285,35 @@ def render_ui(client, reader):
                                     use_container_width=True
                                 )
                             
-                            # Add visualization for numerical data if present
+                            # Error display section (new part)
+                            if "errors" in aed_data:
+                                st.subheader("Journal des Erreurs")
+                                
+                                # Get error headers from metadata or use defaults
+                                error_header = aed_data.get("Rapport DAE - Erreurs en cours", "Date/Heure,Code Erreur")
+                                headers = [h.strip() for h in error_header.split(",")]
+                                
+                                # Create error cards
+                                for error in aed_data["errors"]:
+                                    cols = st.columns([2, 1])
+                                    with cols[0]:
+                                        st.markdown(f"""
+                                        <div class="error-time">
+                                            🕒 {error[0]}
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                                    with cols[1]:
+                                        st.markdown(f"""
+                                        <div class="error-code">
+                                            ⚠️ {error[1]}
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                                    st.markdown("---")  # Separator
+                            
+                            # Visualization section
                             numerical_data = {k: v for k, v in flat_data.items() 
                                             if isinstance(v, (int, float))}
-                            if numerical_data and len(numerical_data) > 1:  # Only create chart if multiple numeric values
+                            if numerical_data and len(numerical_data) > 1:
                                 st.subheader("Visualisation")
                                 chart_data = pd.DataFrame([numerical_data])
                                 fig = px.bar(chart_data.T.reset_index(), x="index", y=0, 
