@@ -1679,12 +1679,7 @@ def render_ui(client, reader):
                                     st.session_state.zip_path = zip_path
                                     
                                     # Make a copy of the zip file to a persistent location
-                                    # since temp_dir will be deleted after exiting this context
-                                    persistent_dir = "temp_exports"
-                                    os.makedirs(persistent_dir, exist_ok=True)
-                                    persistent_zip_path = os.path.join(persistent_dir, zip_filename)
-                                    shutil.copy2(zip_path, persistent_zip_path)
-                                    st.session_state.zip_path = persistent_zip_path
+                                    
                                     
                                     st.success(f"Package d'export généré avec succès ({len(exported_files)} fichiers)")
                         except Exception as e:
@@ -1744,19 +1739,34 @@ def render_ui(client, reader):
                             
                             # Dropbox upload button
                             if st.button("📤 Envoyer vers Dropbox"):
-                                if 'zip_path' in st.session_state:
-                                    # Verify file exists before attempting upload
-                                    if os.path.exists(st.session_state.zip_path):
+                                if 'zip_data' in st.session_state:
+                                    # Create a temporary file with a more controlled lifecycle
+                                    temp_file_path = None
+                                    try:
+                                        # Create a named temporary file but close it immediately
+                                        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                                            temp_file_path = temp_file.name
+                                            temp_file.write(st.session_state.zip_data)
+                                            # File is automatically closed when exiting this block
+                                        
+                                        # Now upload the file
                                         dropbox_path = f"/Exports/{st.session_state.zip_filename}"
-                                        success, message = upload_to_dropbox(st.session_state.zip_path, dropbox_path)
+                                        success, message = upload_to_dropbox(temp_file_path, dropbox_path)
                                         if success:
                                             st.success(f"Fichier uploadé sur Dropbox : {dropbox_path}")
                                         else:
                                             st.error(f"Échec de l'upload : {message}")
-                                    else:
-                                        st.error(f"Fichier introuvable: {st.session_state.zip_path}. Veuillez regénérer le package.")
+                                    except Exception as e:
+                                        st.error(f"Erreur lors de l'upload : {str(e)}")
+                                    finally:
+                                        # Clean up the temporary file
+                                        if temp_file_path and os.path.exists(temp_file_path):
+                                            try:
+                                                os.remove(temp_file_path)
+                                            except:
+                                                pass  # Silently fail if we can't remove the temp file
                                 else:
-                                    st.error("Chemin du fichier non disponible. Veuillez regénérer le package.")
+                                    st.error("Données du package non disponibles. Veuillez regénérer le package.")
                     else:
                         st.info("Aucun fichier disponible pour l'export")
                 else:
