@@ -634,16 +634,13 @@ def render_ui(client, reader):
         st.markdown(
             """
             <div class="header">
-                <div style="display: flex; align-items: center; gap: 2rem;">
-                    <img src="https://www.locacoeur.com/wp-content/uploads/2020/04/Locacoeur_Logo.png" width="120">
-                    <div>
-                        <h1 style="margin: 0; font-size: 2.5rem;">
-                            Système d'inspection des dispositifs médicaux
-                        </h1>
-                        <p style="opacity: 0.9; margin: 0.5rem 0 0;">
-                            v2.1.0 | Plateforme d'analyse intelligente
-                        </p>
-                    </div>
+                <div>
+                    <h1 style="margin: 0; font-size: 2.5rem;">
+                        Système d'inspection des dispositifs médicaux
+                    </h1>
+                    <p style="opacity: 0.9; margin: 0.5rem 0 0;">
+                        v2.1.0 | Plateforme d'analyse intelligente
+                    </p>
                 </div>
             </div>
             """,
@@ -651,51 +648,93 @@ def render_ui(client, reader):
         )
 
     with st.sidebar:
-        st.markdown("### ⚙️ Paramètres de configuration")
+        # Logo and App Title
+        st.image("templates/img/Locacoeur-Logo-Transp.png", use_container_width=True)
+        st.title("Système d'inspection des dispositifs médicaux 📟")
         st.markdown("---")
-        st.subheader("📱 Configuration du dispositif")
-        st.session_state.dae_type = st.radio(
-            "Type d'AED",
-            ("G5", "G3"),
-            index=0,
-            help="Sélectionnez le type de dispositif à inspecter"
-        )
-        st.subheader("🔧 Options de traitement")
-        st.session_state.enable_ocr = st.checkbox(
-            "Activer l'OCR",
-            True,
-            help="Active la reconnaissance de texte sur les images"
-        )
-        st.session_state.auto_classify = st.checkbox(
-            "Classification automatique",
-            True,
-            help="Active la classification automatique des documents"
-        )
-        st.markdown("---")
-        st.markdown("#### 🔍 Guide d'utilisation")
-        with st.expander("Comment utiliser l'application ?", expanded=False):
+        
+        # Main Configuration Section
+        with st.expander("⚙️ Configuration du dispositif", expanded=True):
+            # Device selection with visual icons
+            st.markdown("#### 📱 Type d'appareil")
+            device_col1, device_col2 = st.columns(2)
+            
+            with device_col1:
+                g5_selected = st.session_state.get("dae_type", "G5") == "G5"
+                if st.button("G5", use_container_width=True, 
+                            type="primary" if g5_selected else "secondary"):
+                    st.session_state.dae_type = "G5"
+                    
+            with device_col2:
+                g3_selected = st.session_state.get("dae_type", "G5") == "G3"
+                if st.button("G3", use_container_width=True, 
+                            type="primary" if g3_selected else "secondary"):
+                    st.session_state.dae_type = "G3"
+            
+            st.markdown(f"**Appareil sélectionné:** {st.session_state.get('dae_type', 'G5')}")
+        
+        # Processing Options Section
+        with st.expander("🔧 Options de traitement", expanded=True):
+            # Processing options with toggle switches
+            st.markdown("#### Configuration d'analyse")
+            
+            ocr_enabled = st.toggle(
+                "OCR (Reconnaissance de texte)",
+                value=st.session_state.get("enable_ocr", True),
+                help="Active la reconnaissance de texte sur les images"
+            )
+            st.session_state.enable_ocr = ocr_enabled
+            
+            auto_classify = st.toggle(
+                "Classification automatique",
+                value=st.session_state.get("auto_classify", True),
+                help="Active la classification automatique des documents"
+            )
+            st.session_state.auto_classify = auto_classify
+            
+           
+        
+        # User Guide
+        with st.expander("🔍 Guide d'utilisation", expanded=False):
             st.markdown("""
-                1. **Préparation** 📋  
-                   - Vérifiez que vos documents sont au format requis  
-                   - Assurez-vous que les images sont nettes  
-                2. **Téléversement** 📤  
-                   - Glissez-déposez vos fichiers  
-                   - Attendez le traitement complet  
-                3. **Vérification** ✅  
-                   - Examinez les données extraites  
-                   - Validez les résultats  
-                4. **Export** 📥  
-                   - Choisissez le format d'export  
-                   - Téléchargez vos résultats
-            """)
+                ### Comment utiliser l'application
+                
+                <div style="background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;">
+                    <b>1. Préparation</b> 📋<br>
+                    Vérifiez que vos documents sont au format requis et que les images sont nettes
+                </div>
+                
+                <div style="background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;">
+                    <b>2. Téléversement</b> 📤<br>
+                    Glissez-déposez vos fichiers et attendez le traitement complet
+                </div>
+                
+                <div style="background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;">
+                    <b>3. Vérification</b> ✅<br>
+                    Examinez les données extraites et validez les résultats
+                </div>
+                
+                <div style="background-color:#f0f2f6; padding:10px; border-radius:5px;">
+                    <b>4. Export</b> 📥<br>
+                    Choisissez le format d'export et téléchargez vos résultats
+                </div>
+            """, unsafe_allow_html=True)
+        
+        # Footer
         st.markdown("---")
-        st.caption("Développé par Locacoeur • [Support technique](mailto:support@locacoeur.com)")
+        st.markdown("""
+            <div style="text-align:center;">
+                <p style="font-size:0.8rem;">Développé par Locacoeur</p>
+                <a href="mailto:support@locacoeur.com" style="font-size:0.8rem;">Support technique</a>
+            </div>
+        """, unsafe_allow_html=True)
 
+    # Main content tabs
     tab1, tab2, tab3, tab4 = st.tabs([
-        "📋 Téléversement des documents",
-        "📊 Analyse approfondie",
-        "📋vs📋 Comparaison des documents",
-        "📤 Export automatisé"
+        "📋 Téléversement",
+        "📊 Analyse",
+        "📋vs📋 Comparaison",
+        "📤 Export"
     ])
 
     with tab1:
@@ -1098,35 +1137,51 @@ def render_ui(client, reader):
             
             with col1:
                 st.markdown("""
-                <div class="section-header">
-                    <span>📄 Données RVD</span>
-                </div>
-                """, unsafe_allow_html=True)
-            
-                rvd_data = processed_data.get('RVD', {})
+                    <div class="section-header">
+                        <span>📄 Données RVD</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                rvd_data = processed_data.get('RVD', {})  # Make sure this line's indentation matches the context
                 if rvd_data:
                     with st.container():
                         st.markdown('<div class="data-card">', unsafe_allow_html=True)
-                    
-                        # JSON viewer
+                        
+                        # JSON viewer (keep this for full data access)
                         with st.expander("Voir JSON complet", expanded=False):
                             st.json(rvd_data)
-                    
-                        # Display key metrics
+                        
+                        # Convert flat part of JSON to DataFrame for better display
                         if isinstance(rvd_data, dict):
-                            cols = st.columns(2)
-                            metric_keys = ['date', 'serial', 'id', 'status']
-                            for i, key in enumerate(metric_keys):
-                                with cols[i % 2]:
-                                    if key in rvd_data:
-                                        st.metric(label=key.capitalize(), value=rvd_data[key])
-                    
+                            # Extract simple key-value pairs (non-nested)
+                            flat_data = {k: v for k, v in rvd_data.items() if not isinstance(v, (dict, list))}
+                            
+                            # Create DataFrame and display it
+                            if flat_data:
+                                df = pd.DataFrame([flat_data])
+                                st.dataframe(
+                                    df.T.reset_index().rename(columns={"index": "Attribut", 0: "Valeur"}),
+                                    hide_index=True,
+                                    use_container_width=True
+                                )
+                            
+                            # Check for changements and display alerts
+                            changement = ["Changement batterie", "Changement électrodes adultes", "Changement électrodes pédiatriques"]
+                            for i in changement:
+                                if rvd_data.get(i) == "Oui":
+                                    st.toast(f"{i}", icon="⚠️")
+                            
+                            # If there's any numerical data that could be visualized, add a chart
+                            numerical_data = {k: v for k, v in flat_data.items() if isinstance(v, (int, float))}
+                            if numerical_data:
+                                st.subheader("Visualisation")
+                                chart_data = pd.DataFrame([numerical_data])
+                                fig = px.bar(chart_data.T.reset_index(), x="index", y=0, 
+                                            labels={"index": "Mesure", "0": "Valeur"},
+                                            title="Données numériques")
+                                st.plotly_chart(fig, use_container_width=True)
+                        
                         st.markdown('</div>', unsafe_allow_html=True)
-                        #Changement de consommable
-                        changement = ["Changement batterie", "Changement électrodes adultes", "Changement électrodes pédiatriques"]
-                        for i in changement:
-                            if rvd_data.get(i) == "Oui":
-                                st.toast(f"{i}",icon = "⚠️")
                 else:
                     st.markdown("""
                     <div class="empty-state">
@@ -1148,9 +1203,11 @@ def render_ui(client, reader):
                     with st.container():
                         st.markdown('<div class="data-card">', unsafe_allow_html=True)
                         
+                        # Keep the JSON viewer for complete data access
                         with st.expander("Voir JSON complet", expanded=False):
                             st.json(aed_data)
                         
+                        # Display key metrics at the top
                         if isinstance(aed_data, dict):
                             cols = st.columns(2)
                             metric_keys = ['date', 'serial', 'id', 'status']
@@ -1158,6 +1215,30 @@ def render_ui(client, reader):
                                 with cols[i % 2]:
                                     if key in aed_data:
                                         st.metric(label=key.capitalize(), value=aed_data[key])
+                            
+                            # Convert flat data to DataFrame for better display
+                            flat_data = {k: v for k, v in aed_data.items() 
+                                        if not isinstance(v, (dict, list)) and k not in metric_keys}
+                            
+                            if flat_data:
+                                st.subheader("Données détaillées")
+                                df = pd.DataFrame([flat_data])
+                                st.dataframe(
+                                    df.T.reset_index().rename(columns={"index": "Attribut", 0: "Valeur"}),
+                                    hide_index=True,
+                                    use_container_width=True
+                                )
+                            
+                            # Add visualization for numerical data if present
+                            numerical_data = {k: v for k, v in flat_data.items() 
+                                            if isinstance(v, (int, float))}
+                            if numerical_data and len(numerical_data) > 1:  # Only create chart if multiple numeric values
+                                st.subheader("Visualisation")
+                                chart_data = pd.DataFrame([numerical_data])
+                                fig = px.bar(chart_data.T.reset_index(), x="index", y=0, 
+                                            labels={"index": "Paramètre", "0": "Valeur"},
+                                            title="Paramètres numériques")
+                                st.plotly_chart(fig, use_container_width=True)
                         
                         st.markdown('</div>', unsafe_allow_html=True)
                 else:
@@ -1167,7 +1248,7 @@ def render_ui(client, reader):
                         <p style="font-size:0.85rem; margin-top:0.5rem;">Veuillez traiter des documents pour voir les résultats</p>
                     </div>
                     """, unsafe_allow_html=True)
-            
+
             # Data visualization section
             st.markdown("""
             <div class="section-header" style="margin-top:2rem;">
