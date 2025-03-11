@@ -5,6 +5,8 @@ import json
 import os
 import zipfile
 import tempfile   
+import shutil
+import dropbox
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict
@@ -728,6 +730,41 @@ def render_ui(client, reader):
                 <a href="mailto:support@locacoeur.com" style="font-size:0.8rem;">Support technique</a>
             </div>
         """, unsafe_allow_html=True)
+
+    # Initialize Dropbox outside the function for global use
+    DROPBOX_ACCESS_TOKEN = st.secrets["DROPBOX_ACCESS_TOKEN"]
+
+    # Create a persistent temp directory for the session
+    if 'temp_dir' not in st.session_state:
+        st.session_state.temp_dir = tempfile.mkdtemp()
+
+    def upload_to_dropbox(file_path, dropbox_path):
+        """Upload file to Dropbox."""
+        try:
+            dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+            if not os.path.exists(file_path):
+                return False, f"File not found: {file_path}"
+                
+            with open(file_path, "rb") as f:
+                dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("overwrite"))
+            return True, dropbox_path
+        except Exception as e:
+            return False, str(e)
+
+    # Test Dropbox connection once at startup
+    try:
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        account = dbx.users_get_current_account()
+        print(f"Connected to Dropbox: {account.name.display_name}")
+    except Exception as e:
+        print(f"Error connecting to Dropbox: {e}")
+
+    # Ensure session state initialization
+    if 'uploaded_files' not in st.session_state:
+        st.session_state.uploaded_files = []
+
+    if 'processed_data' not in st.session_state:
+        st.session_state.processed_data = {'RVD': {}}
 
     # Main content tabs
     tab1, tab2, tab3, tab4 = st.tabs([
@@ -1590,40 +1627,27 @@ def render_ui(client, reader):
                                     # Use Streamlit to allow user to download the zip
                                     with open(zip_path, "rb") as f:
                                         zip_data = f.read()
-                                    
-                                    # Display download button in the preview column
-                                    with col_preview:
-                                        st.success(f"Package d'export créé avec {len(exported_files)} fichiers")
-                                        st.download_button(
-                                            label="📥 Télécharger le package d'export",
-                                            data=zip_data,
-                                            file_name=zip_filename,
-                                            mime="application/zip",
-                                            key="download_zip",
-                                            help="Télécharge un fichier ZIP contenant tous les documents"
-                                        )
                                         
-                                        # Show list of included files with icons
-                                        st.markdown("#### 📋 Fichiers inclus dans le package :")
-                                        for file in exported_files:
-                                            if file.endswith('.pdf'):
-                                                icon = "📄"
-                                            elif file.endswith(('.jpg', '.jpeg', '.png', '.gif')):
-                                                icon = "🖼️"
-                                            else:
-                                                icon = "📁"
-                                            st.write(f"{icon} {file}")
-                                else:
-                                    with col_preview:
-                                        st.warning("Aucun fichier à exporter")
+                                    # Store zip data in session state for download button access
+                                    st.session_state.zip_data = zip_data
+                                    st.session_state.zip_filename = zip_filename
+                                    st.session_state.zip_path = zip_path
                                     
+                                    # Make a copy of the zip file to a persistent location
+                                    # since temp_dir will be deleted after exiting this context
+                                    persistent_dir = "temp_exports"
+                                    os.makedirs(persistent_dir, exist_ok=True)
+                                    persistent_zip_path = os.path.join(persistent_dir, zip_filename)
+                                    shutil.copy2(zip_path, persistent_zip_path)
+                                    st.session_state.zip_path = persistent_zip_path
+                                    
+                                    st.success(f"Package d'export généré avec succès ({len(exported_files)} fichiers)")
                         except Exception as e:
-                            st.error(f"Erreur lors de la création du package : {str(e)}")
-                            st.exception(e)  # Show detailed error traceback in development
-
+                            st.error(f"Erreur lors de la génération du package: {str(e)}")
+            
             with col_preview:
                 st.markdown("#### 👁️ Aperçu des fichiers")
-                if 'uploaded_files' in st.session_state:
+                if st.session_state.get('uploaded_files'):
                     file_list = []
                     pdf_count = 0
                     image_count = 0
@@ -1663,6 +1687,31 @@ def render_ui(client, reader):
                             },
                             hide_index=True
                         )
+                        
+                        # Show download buttons if zip has been created
+                        if 'zip_data' in st.session_state and 'zip_filename' in st.session_state:
+                            st.download_button(
+                                label="⬇️ Télécharger le package",
+                                data=st.session_state.zip_data,
+                                file_name=st.session_state.zip_filename,
+                                mime="application/zip"
+                            )
+                            
+                            # Dropbox upload button
+                            if st.button("📤 Envoyer vers Dropbox"):
+                                if 'zip_path' in st.session_state:
+                                    # Verify file exists before attempting upload
+                                    if os.path.exists(st.session_state.zip_path):
+                                        dropbox_path = f"/Exports/{st.session_state.zip_filename}"
+                                        success, message = upload_to_dropbox(st.session_state.zip_path, dropbox_path)
+                                        if success:
+                                            st.success(f"Fichier uploadé sur Dropbox : {dropbox_path}")
+                                        else:
+                                            st.error(f"Échec de l'upload : {message}")
+                                    else:
+                                        st.error(f"Fichier introuvable: {st.session_state.zip_path}. Veuillez regénérer le package.")
+                                else:
+                                    st.error("Chemin du fichier non disponible. Veuillez regénérer le package.")
                     else:
                         st.info("Aucun fichier disponible pour l'export")
                 else:
