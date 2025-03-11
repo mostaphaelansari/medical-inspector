@@ -722,13 +722,14 @@ def render_ui(client, reader):
                 </div>
             """, unsafe_allow_html=True)
         
-        # Footer
+        # Enhanced footer with version info
         st.markdown("---")
         st.markdown("""
-            <div style="text-align:center;">
-                <p style="font-size:0.8rem;">Développé par Locacoeur</p>
-                <a href="mailto:support@locacoeur.com" style="font-size:0.8rem;">Support technique</a>
-            </div>
+        <div style="text-align:center; padding:1rem 0; background:#f8f9fa; border-radius:8px;">
+            <p style="margin:0; font-size:0.8rem; color:#666;">Version 1.2.0</p>
+            <p style="margin:0; font-size:0.8rem;">💻 Développé par <b>Locacoeur</b></p>
+            <a href="mailto:support@locacoeur.com" style="font-size:0.75rem; color:#2196f3;">Contact support technique</a>
+        </div>
         """, unsafe_allow_html=True)
 
     # Initialize Dropbox outside the function for global use
