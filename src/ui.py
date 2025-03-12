@@ -1373,7 +1373,7 @@ def render_ui(client, reader):
                 with col2:
                     with st.container():
                         st.markdown('<div class="data-card">', unsafe_allow_html=True)
-                        st.markdown("<h4 style='margin-top:0;'>Qualité du traitement</h4>", unsafe_allow_html=True)
+                        st.markdown("<h4 style='margin-top:0;'>Statut du traitement</h4>", unsafe_allow_html=True)
                         
                         if total_documents > 0:
                             st.markdown(f"""
@@ -1643,7 +1643,7 @@ def render_ui(client, reader):
                                             if 'rapport de vérification' in file.name.lower():
                                                 file_name = f"LCC_{code_site}_RVD_{date_str}.pdf"
                                             else:
-                                                file_name = f"LCC_{st.session_state.dae_type}_{code_site}_AEDReport_{date_str}.pdf"
+                                                file_name = f"LCC_{st.session_state.dae_type}_{code_site}_AEDR{date_str}.pdf"
                                             
                                             file_path = os.path.join(temp_dir, file_name)
                                             with open(file_path, "wb") as f:
