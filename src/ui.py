@@ -3,25 +3,24 @@
 import base64
 import json
 import os
-import zipfile
-import tempfile   
 import shutil
-import dropbox
+import tempfile
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict
-from tkinter import Tk, filedialog
 
+import dropbox
 import altair as alt
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 from PIL import Image
-
+from tkinter import Tk, filedialog
 
 from .config import ALLOWED_EXTENSIONS, CSS_STYLE
 from .processing import process_uploaded_file
 from .comparison import compare_data
+
 
 
 def display_comparison_dashboard(data: Dict[str, Dict]) -> None:
