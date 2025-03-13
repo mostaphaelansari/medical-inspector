@@ -121,7 +121,7 @@ def create_summary_metrics(data: Dict[str, Dict]) -> None:
     # Display metrics in a card
     with st.container():
         st.markdown("""
-        <div style="background-color: #f8f9fa; padding: 1.5rem; border-radius: 10px; 
+        <div style="background-color: #006A4E; padding: 1.5rem; border-radius: 10px; 
                    margin-bottom: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
             <h2 style="margin-top: 0;">Rapport de Comparaison</h2>
         </div>
@@ -634,7 +634,7 @@ def render_ui(client, reader):
     with st.container():
         st.markdown(
         """
-        <div class="header" style="background: linear-gradient(to right, #1E3A8A, #3B82F6); padding: 1.5rem; border-radius: 10px; color: white; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); margin-bottom: 2rem;">
+        <div class="header" style="background: linear-gradient(to right, #006A4E, #307D7E); padding: 1.5rem; border-radius: 10px; color: white; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); margin-bottom: 2rem;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <h1 style="margin: 0; font-size: 2.5rem; font-weight: 700; letter-spacing: -0.5px;">
@@ -651,6 +651,71 @@ def render_ui(client, reader):
     )
 
     with st.sidebar:
+        # Add custom CSS for #000bf7 blue theme
+        st.markdown("""
+            <style>
+                /* Custom blue theme for sidebar */
+                [data-testid="stSidebar"] {
+                    background-color: #006A4E;
+                    color: white;
+                }
+                
+                /* Sidebar title and text */
+                [data-testid="stSidebar"] .st-emotion-cache-1avcm0n {
+                    color: white;
+                }
+                
+                /* Headings in sidebar */
+                [data-testid="stSidebar"] h1, 
+                [data-testid="stSidebar"] h2, 
+                [data-testid="stSidebar"] h3, 
+                [data-testid="stSidebar"] h4 {
+                    color: white;
+                }
+                
+                /* Expander backgrounds */
+                [data-testid="stSidebar"] .st-emotion-cache-1bx5d6i {
+                    background-color: rgba(255, 255, 255, 0.1);
+                    border-radius: 8px;
+                    margin-bottom: 10px;
+                }
+                
+                /* Toggle button colors */
+                [data-testid="stSidebar"] .st-emotion-cache-19rxjzo {
+                    background-color: #0009c8;
+                }
+                
+                /* Secondary buttons */
+                [data-testid="stSidebar"] [data-testid="baseButton-secondary"] {
+                    background-color: rgba(255, 255, 255, 0.2);
+                    color: white;
+                    border: none;
+                }
+                
+                /* Primary buttons */
+                [data-testid="stSidebar"] [data-testid="baseButton-primary"] {
+                    background-color: #ffffff;
+                    color: #000bf7;
+                }
+                
+                /* Footer styling */
+                [data-testid="stSidebar"] div[style*="text-align:center"] {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                }
+                
+                /* Footer text */
+                [data-testid="stSidebar"] div[style*="text-align:center"] p {
+                    color: white !important;
+                }
+                
+                /* Footer link */
+                [data-testid="stSidebar"] div[style*="text-align:center"] a {
+                    color: #cdd6ff !important;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+        
         # Logo and App Title
         st.image("templates/img/Locacoeur-Logo-Transp.png", use_container_width=True)
         st.title("Système d'inspection des dispositifs médicaux 📟")
@@ -676,48 +741,54 @@ def render_ui(client, reader):
             
             st.markdown(f"**Appareil sélectionné:** {st.session_state.get('dae_type', 'G5')}")
         
-        # Processing Options Section
+            # Processing Options Section
         with st.expander("🔧 Options de traitement", expanded=True):
-            # Processing options with toggle switches
-            st.markdown("#### Configuration d'analyse")
-            
-            ocr_enabled = st.toggle(
-                "OCR (Reconnaissance de texte)",
-                value=st.session_state.get("enable_ocr", True),
-                help="Active la reconnaissance de texte sur les images"
-            )
-            st.session_state.enable_ocr = ocr_enabled
-            
-            auto_classify = st.toggle(
-                "Classification automatique",
-                value=st.session_state.get("auto_classify", True),
-                help="Active la classification automatique des documents"
-            )
-            st.session_state.auto_classify = auto_classify
-            
-           
-        
+                # Processing options with toggle switches
+                st.markdown('<h4 style="color: white;">Configuration d\'analyse</h4>', unsafe_allow_html=True)
+                
+                # Using custom CSS to make the toggle labels white
+                st.markdown("""
+                <style>
+                div[data-testid="stExpander"] label {
+                    color: white !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                
+                ocr_enabled = st.toggle(
+                    "OCR (Reconnaissance de texte)",
+                    value=st.session_state.get("enable_ocr", True),
+                    help="Active la reconnaissance de texte sur les images"
+                )
+                st.session_state.enable_ocr = ocr_enabled
+                
+                auto_classify = st.toggle(
+                    "Classification automatique",
+                    value=st.session_state.get("auto_classify", True),
+                    help="Active la classification automatique des documents"
+                )
+                st.session_state.auto_classify = auto_classify
         # User Guide
         with st.expander("🔍 Guide d'utilisation", expanded=False):
             st.markdown("""
                 ### Comment utiliser l'application
                 
-                <div style="background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;">
+                <div style="background-color:rgba(255, 255, 255, 0.15); padding:10px; border-radius:5px; margin-bottom:10px;">
                     <b>1. Préparation</b> 📋<br>
                     Vérifiez que vos documents sont au format requis et que les images sont nettes
                 </div>
                 
-                <div style="background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;">
+                <div style="background-color:rgba(255, 255, 255, 0.15); padding:10px; border-radius:5px; margin-bottom:10px;">
                     <b>2. Téléversement</b> 📤<br>
                     Glissez-déposez vos fichiers et attendez le traitement complet
                 </div>
                 
-                <div style="background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;">
+                <div style="background-color:rgba(255, 255, 255, 0.15); padding:10px; border-radius:5px; margin-bottom:10px;">
                     <b>3. Vérification</b> ✅<br>
                     Examinez les données extraites et validez les résultats
                 </div>
                 
-                <div style="background-color:#f0f2f6; padding:10px; border-radius:5px;">
+                <div style="background-color:rgba(255, 255, 255, 0.15); padding:10px; border-radius:5px;">
                     <b>4. Export</b> 📥<br>
                     Choisissez le format d'export et téléchargez vos résultats
                 </div>
@@ -726,10 +797,10 @@ def render_ui(client, reader):
         # Enhanced footer with version info
         st.markdown("---")
         st.markdown("""
-        <div style="text-align:center; padding:1rem 0; background:#f8f9fa; border-radius:8px;">
-            <p style="margin:0; font-size:0.8rem; color:#666;">Version 1.2.0</p>
+        <div style="text-align:center; padding:1rem 0; background:rgba(255, 255, 255, 0.15); border-radius:8px;">
+            <p style="margin:0; font-size:0.8rem; color:#ffffff;">Version 1.2.0</p>
             <p style="margin:0; font-size:0.8rem;">💻 Développé par <b>Locacoeur</b></p>
-            <a href="mailto:support@locacoeur.com" style="font-size:0.75rem; color:#2196f3;">Contact support technique</a>
+            <a href="mailto:support@locacoeur.com" style="font-size:0.75rem; color:#cdd6ff;">Contact support technique</a>
         </div>
         """, unsafe_allow_html=True)
 
@@ -786,7 +857,7 @@ def render_ui(client, reader):
             .stTabs [aria-selected="true"] {
                 font-size: 28px !important;
                 font-weight: 900 !important; /* Extra bold */
-                background-color: #000bf7 !important; /* Different color for active tab */
+                background-color: #006A4E !important; /* Different color for active tab */
                 color: white !important;
             }
         </style>
