@@ -201,7 +201,7 @@ def compare_electrodes_section(rvd: Dict, images: List[Dict], section_type: str)
     results = {}
     
     # Check if the first serial field is NOT 'Électrodes RCP ?'
-    if rvd.get(serial_fields[0]) != 'Électrodes RCP ?':
+    if rvd.get(serial_fields[0]) != 'Non trouvé':
         results['Numéro_de_série'] = compare_rvd_releve(
             rvd.get(serial_fields[0]),
             rvd.get(serial_fields[1]),

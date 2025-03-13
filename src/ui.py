@@ -98,7 +98,7 @@ def create_summary_metrics(data: Dict[str, Dict]) -> None:
                     # Handle nested structure
                     for subfield, subdata in field_data.items():
                         section_fields += 1
-                        match_keys = [k for k in subdata.keys() if k.startswith('match_')]
+                        match_keys = [k for k in subdata.keys() if k.startswith('match_')] if isinstance(subdata, dict) else []
                         section_comparisons += len(match_keys)
                         section_matches += sum(1 for k in match_keys if subdata.get(k, False))
                 else:

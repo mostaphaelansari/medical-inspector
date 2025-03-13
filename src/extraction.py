@@ -21,7 +21,7 @@ def extract_rvd_data(text: str) -> Dict[str, str]:
             next_line = lines[current_index + 1].strip()
             if next_line and not any(kw.lower() in next_line.lower() for kw in keywords):
                 return next_line
-        return "Non trouvé"
+        return ""
     
     keywords = [
         "Commentaire fin d'intervention et recommandations",
@@ -64,7 +64,7 @@ def extract_rvd_data(text: str) -> Dict[str, str]:
     results = {}
     lines = text.splitlines()
     for keyword in keywords:
-        value = "Non trouvé"
+        value = ""
         if any(x in keyword.lower() for x in ["n° série", "numéro de série"]):
             pattern = re.compile(re.escape(keyword) + r"[\s:]*([A-Za-z0-9\-]+)(?=\s|$)", re.IGNORECASE)
         elif keyword.lower() == "code site":
@@ -90,7 +90,7 @@ def extract_rvd_data(text: str) -> Dict[str, str]:
                     value = match.group(1)
                     break
                     
-        if value != "Non trouvé":
+        if value:
             value = re.sub(r'\s*(?:Vérification|Validation).*$', '', value)
             if "date" in keyword.lower() and re.search(r'\d{2}[/-]\d{2}[/-]\d{4}', value):
                 value = re.search(r'\d{2}[/-]\d{2}[/-]\d{4}(?:\s+\d{2}:\d{2})?', value).group(0)
@@ -100,22 +100,6 @@ def extract_rvd_data(text: str) -> Dict[str, str]:
         results[keyword] = value
     
     return results
-
-def _get_next_valid_line(lines: List[str], start_idx: int, keyword: str) -> str:
-    """Helper function to get the next valid line after a keyword match."""
-    j = start_idx + 1
-    while j < len(lines):
-        next_line = lines[j].strip()
-        if (
-            next_line and
-            not any(x in next_line for x in ["Vérification", "Validation"])
-        ):
-            if "date" in keyword.lower() and not re.search(r'\d{2}[/-]\d{2}[/-]\d{4}', next_line):
-                j += 1
-                continue
-            return next_line
-        j += 1
-    return "Non trouvé"
 
 
 
