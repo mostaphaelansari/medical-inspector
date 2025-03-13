@@ -5,6 +5,7 @@ import os
 import tempfile
 from typing import Dict, List, Optional, Tuple
 import io
+import re
 import numpy as np
 import pdfplumber
 import streamlit as st
@@ -97,6 +98,32 @@ def extract_text_from_pdf(uploaded_file) -> str:
         logger.error("PDF text extraction failed: %s", e)
     
     return text
+
+def extract_date_time_from_AED_report(pdf_path: str) -> Optional[str]:
+    """Extrait la date et l'heure du rapport depuis la dernière page d'un PDF.
+    
+    Args:
+        pdf_path (str): Chemin du fichier PDF.
+    
+    Returns:
+        Optional[str]: La date et l'heure extraites sous forme de chaîne ou None si non trouvées.
+    """
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            last_page = pdf.pages[-1]  # Récupère la dernière page
+            text = last_page.extract_text()  # Extrait le texte de la page
+            
+            # Recherche du motif de la date et de l'heure (DD/MM/YYYY HH:MM:SS)
+            match = re.search(r"\b\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}\b", text)
+            
+            if match:
+                return match.group()
+            else:   
+                return None
+    
+    except Exception as e:
+        print(f"Erreur lors de l'extraction : {e}")
+        return None
 
 
 
