@@ -121,7 +121,7 @@ def create_summary_metrics(data: Dict[str, Dict]) -> None:
     # Display metrics in a card
     with st.container():
         st.markdown("""
-        <div style="background-color: #006A4E; padding: 1.5rem; border-radius: 10px; 
+        <div style="background-color: #66CDAA; padding: 1.5rem; border-radius: 10px; 
                    margin-bottom: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
             <h2 style="margin-top: 0;">Rapport de Comparaison</h2>
         </div>
@@ -847,7 +847,7 @@ def render_ui(client, reader):
             .stTabs [data-baseweb="tab"] {
                 font-size: 24px !important; /* Super large text */
                 font-weight: bold !important;
-                padding: 15px 250px !important; /* Increase tab size */
+                padding: 15px 100px !important; /* Increase tab size */
                 background-color: 14c394 !important; /* Highlight tabs */
                 color: black !important;
                 border-radius: 10px !important;
