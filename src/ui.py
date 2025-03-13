@@ -633,20 +633,22 @@ def render_ui(client, reader):
 
     with st.container():
         st.markdown(
-            """
-            <div class="header">
+        """
+        <div class="header" style="background: linear-gradient(to right, #1E3A8A, #3B82F6); padding: 1.5rem; border-radius: 10px; color: white; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); margin-bottom: 2rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <h1 style="margin: 0; font-size: 2.5rem;">
+                    <h1 style="margin: 0; font-size: 2.5rem; font-weight: 700; letter-spacing: -0.5px;">
                         Système d'inspection des dispositifs médicaux
                     </h1>
-                    <p style="opacity: 0.9; margin: 0.5rem 0 0;">
+                    <p style="opacity: 0.9; margin: 0.5rem 0 0; font-size: 1.1rem;">
                         v2.1.0 | Plateforme d'analyse intelligente
                     </p>
                 </div>
             </div>
-            """,
-            unsafe_allow_html=True
-        )
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     with st.sidebar:
         # Logo and App Title
@@ -766,6 +768,32 @@ def render_ui(client, reader):
     if 'processed_data' not in st.session_state:
         st.session_state.processed_data = {'RVD': {}}
 
+    # Custom CSS to make tabs much bigger
+    st.markdown(
+        """
+        <style>
+            /* Make tabs bigger */
+            .stTabs [data-baseweb="tab"] {
+                font-size: 24px !important; /* Super large text */
+                font-weight: bold !important;
+                padding: 15px 250px !important; /* Increase tab size */
+                background-color: 14c394 !important; /* Highlight tabs */
+                color: black !important;
+                border-radius: 10px !important;
+            }
+
+            /* Make active tab even bigger */
+            .stTabs [aria-selected="true"] {
+                font-size: 28px !important;
+                font-weight: 900 !important; /* Extra bold */
+                background-color: #000bf7 !important; /* Different color for active tab */
+                color: white !important;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
     # Main content tabs
     tab1, tab2, tab3, tab4 = st.tabs([
         "📋 Téléversement",
@@ -773,6 +801,7 @@ def render_ui(client, reader):
         "📋vs📋 Comparaison",
         "📤 Export"
     ])
+
 
     with tab1:
     # Header with styled title
@@ -1372,7 +1401,7 @@ def render_ui(client, reader):
                 with col2:
                     with st.container():
                         st.markdown('<div class="data-card">', unsafe_allow_html=True)
-                        st.markdown("<h4 style='margin-top:0;'>Statut du traitement</h4>", unsafe_allow_html=True)
+                        st.markdown("<h4 style='margin-top:0;'>Qualité du traitement</h4>", unsafe_allow_html=True)
                         
                         if total_documents > 0:
                             st.markdown(f"""
@@ -1458,7 +1487,7 @@ def render_ui(client, reader):
     with tab3:
         # Import datetime at the top level of the tab3 block
         
-        
+        # Header section
         st.markdown("""
         <div style="text-align: center; margin-bottom: 2rem;">
             <h1>📋 vs 📑 Comparaison des Documents</h1>
@@ -1466,23 +1495,15 @@ def render_ui(client, reader):
         </div>
         """, unsafe_allow_html=True)
         
-        # Add an information box at the top
+        # Information box
         st.info("""
         Cette section compare les informations entre les documents de référence (RVD), 
         les données de l'appareil (AED) et les images. Le système vérifie automatiquement la cohérence 
         des données critiques pour garantir la conformité du dispositif.
         """)
+        st.markdown("---")  # Separator
         
-        # Run comparison and get results organized by equipment sections
-        comparison_results = compare_data()
-        
-        # Use the comprehensive dashboard function instead of individual section displays
-        display_comparison_dashboard(comparison_results)
-        
-        # Add a clear summary section at the bottom
-        st.markdown("## 📊 Résumé de la Validation")
-        
-        # Check if all matches are successful with improved checking logic
+        # Define helper function for validation check
         def check_matches(section_data):
             if not section_data:
                 return True, []
@@ -1512,7 +1533,49 @@ def render_ui(client, reader):
             
             return all_matched, failed_items
         
-        # Process all sections
+        # Error display section
+        if "errors" in aed_data:
+            st.subheader("Journal des Erreurs")
+                                
+            # Get error headers from metadata or use defaults
+            error_header = aed_data.get("Rapport DAE - Erreurs en cours", "Date/Heure,Code Erreur")
+            headers = [h.strip() for h in error_header.split(",")]
+                                
+            # Create error cards
+            for error in aed_data["errors"]:
+                cols = st.columns([2, 1])
+                with cols[0]:
+                    st.markdown(f"""
+                                    <div class="error-time">
+                                    🕒 {error[0]}
+                                    </div>
+                            """, unsafe_allow_html=True)
+                with cols[1]:
+                    st.markdown(f"""
+                                    <div class="error-code">
+                                        ⚠️ {error[1]}
+                                        </div>
+                                    """, unsafe_allow_html=True)
+        st.markdown("---")  # Separator
+        
+        # Consumables changes section
+        st.subheader("Changements de Consommables")
+        changement = ["Changement batterie", "Changement électrodes adultes", "Changement électrodes pédiatriques"]
+        for i in changement:
+            if rvd_data.get(i) == "Oui":
+                st.warning(f"{i} est effectué.", icon="⚠️")
+            else:
+                st.success(f"Aucune  {i} n'est effectuée.")
+        st.markdown("---")  # Separator
+        
+        # Run comparison and display dashboard
+        comparison_results = compare_data()
+        display_comparison_dashboard(comparison_results)
+        
+        # Summary section
+        st.markdown("## 📊 Résumé de la Validation")
+        
+        # Process all sections for validation
         all_matches = True
         all_failed_items = []
         
@@ -1595,16 +1658,13 @@ def render_ui(client, reader):
                 </ul>
             </div>
             """, unsafe_allow_html=True)
-            
-            
         
-        # Add a timestamp and signature
+        # Timestamp and signature
         st.markdown(f"""
         <div style="text-align: right; margin-top: 2rem; color: #6c757d; font-size: 0.8rem;">
             Rapport généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}
         </div>
         """, unsafe_allow_html=True)
-
 
 
         
