@@ -1326,7 +1326,7 @@ def render_ui(client, reader):
                             changement = ["Changement batterie", "Changement électrodes adultes", "Changement électrodes pédiatriques"]
                             for i in changement:
                                 if rvd_data.get(i) == "Oui":
-                                    st.warning(f"{i}  est effectué.", icon="⚠️")
+                                    st.warning(f"{i} a été effectuée ⚠️")
                             # If there's any numerical data that could be visualized, add a chart
                             numerical_data = {k: v for k, v in flat_data.items() if isinstance(v, (int, float))}
                             if numerical_data:
@@ -1634,7 +1634,7 @@ def render_ui(client, reader):
         changement = ["Changement batterie", "Changement électrodes adultes", "Changement électrodes pédiatriques"]
         for i in changement:
             if rvd_data.get(i) == "Oui":
-                st.warning(f"{i} est effectué.", icon="⚠️")
+                st.warning(f"{i} a été effectuée ⚠️")
             else:
                 st.success(f"Aucune  {i} n'est effectuée.")
         st.markdown("---")  # Separator
@@ -1736,11 +1736,6 @@ def render_ui(client, reader):
             Rapport généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}
         </div>
         """, unsafe_allow_html=True)
-
-
-        
-     
-
     with tab4:
         st.title("📤 Export automatisé")
         with st.container():

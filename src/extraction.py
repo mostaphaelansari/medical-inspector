@@ -1,7 +1,7 @@
 """Data extraction functions for the Comparateur_PDF project."""
 
 import re
-
+import pdfplumber
 from typing import Dict, List, Tuple, Optional
 from PIL import Image, ImageEnhance, ImageFilter
 from pyzbar.pyzbar import decode
@@ -145,31 +145,78 @@ def extract_aed_g5_data(text: str) -> Dict[str, any]:
     return results
 
 def extract_aed_g3_data(text: str) -> Dict[str, str]:
-    """Extract relevant data from AED G3 text.
-
+    """Extrait des mots-clés spécifiques d'un texte de rapport AED.
+    
     Args:
-        text: Text extracted from the AED G3 PDF.
-
+        text (str): Texte extrait du rapport AED.
+    
     Returns:
-        Extracted data with keywords as keys.
+        Dict[str, Any]: Dictionnaire contenant les valeurs extraites pour chaque mot-clé
+                        et une liste des erreurs sous la clé 'errors'.
     """
-    keywords = [
-        "Série DSA",
-        "Dernier échec de DSA",
-        "Numéro de lot",
-        "Date de mise en service",
-        "Capacité initiale de la batterie 12V",
-        "Capacité restante de la batterie 12V",
-        "Autotest",
-    ]
+    # Liste des mots-clés à extraire
+    keywords = {
+        "Série DSA": "Série DSA",
+        "Dernier échec de DSA": "Dernier échec de DSA",
+        "Numéro de lot": "Numéro de lot",
+        "Date de mise en service": "Date de mise en service",
+        "Autotest": "Autotest",
+    }
+    
+    # Dictionnaire pour stocker les résultats
     results = {}
-    lines = text.split('\n')
-    for i, line in enumerate(lines):
-        for keyword in keywords:
-            if keyword in line:
-                value = lines[i + 1].strip() if i + 1 < len(lines) else ""
-                results[keyword] = value
-    return results
+    
+    try:
+        # Pour chaque mot-clé standard, chercher sa valeur dans le texte
+        for key, pattern_base in keywords.items():
+            pattern_escaped = re.escape(pattern_base)
+            pattern = f"{pattern_escaped}\\s*:\\s*([^\\n]+)"
+            
+            match = re.search(pattern, text)
+            if match:
+                results[key] = match.group(1).strip()
+            else:
+                results[key] = ""
+        
+        # Traitement spécial pour les capacités de batterie - extraction en mAh puis conversion en V
+        # Pour la capacité initiale
+        match_initial = re.search(r"Capacité initiale de la batterie 12V\s*:\s*(\d+)\s*mAh", text)
+        if match_initial:
+            mah_value = float(match_initial.group(1))
+            # Conversion approximative de mAh à V (à ajuster selon les spécifications)
+            v_value = (mah_value / 625)
+            results["Capacité initiale de la batterie"] = f"{v_value:.2f} V"
+        else:
+            results["Capacité initiale de la batterie"] = ""
+        
+        # Pour la capacité restante
+        match_remaining = re.search(r"Capacité restante de la batterie 12V\s*:\s*(\d+)\s*mAh", text)
+        if match_remaining:
+            mah_value = float(match_remaining.group(1))
+            # Conversion approximative de mAh à V
+            v_value = (mah_value / 625)
+            results["Capacité restante de la batterie"] = f"{v_value:.2f} V"
+        else:
+            results["Capacité restante de la batterie"] = ""
+        
+        # Extract errors (code d'erreur avec date/heure)
+        errors = re.findall(r"(Code d'erreur \w+)\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}:\d{2})", text)
+        results["errors"] = [(f"{date} {time}", code) for code, date, time in errors]
+        
+        # Print error information
+        if results["errors"]:
+            print("Errors found:")
+            for error in results["errors"]:
+                print(f"Date/Time: {error[0]}, Error ID: {error[1]}")
+        else:
+            print("No errors found in the section.")
+        
+        return results
+        
+    except Exception as e:
+        print(f"Erreur lors de l'extraction des données: {e}")
+        return {"erreur": str(e)}
+
 
 def extract_important_info_g3(results: List[Tuple]) -> Tuple[Optional[str], Optional[str]]:
     """Extract important information from OCR results for G3 devices.
