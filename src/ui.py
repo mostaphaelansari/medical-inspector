@@ -1736,6 +1736,7 @@ def render_ui(client, reader):
             Rapport généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}
         </div>
         """, unsafe_allow_html=True)
+        
     with tab4:
         st.title("📤 Export automatisé")
         with st.container():
