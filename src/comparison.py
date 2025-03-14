@@ -140,6 +140,8 @@ def compare_battery_level(rvd: Dict, aed: Dict) -> Dict:
     try:
         # Extract RVD battery level
         rvd_batt_str = rvd.get('Niveau de charge de la batterie en %')
+        if rvd.get('Changement batterie') == "Oui":
+            rvd_batt_str = rvd.get('Niveau de charge nouvelle batterie')
         if not rvd_batt_str or rvd_batt_str == "Non trouvé":
             result['error'] = "Missing RVD battery data"
             return result
@@ -251,31 +253,57 @@ def compare_section(section: str, rvd: Dict, aed: Dict, images: List[Dict]) -> D
 
     elif section == "batterie":
         image = get_image_by_type(images, 'Batterie')
-        battery_serial_field = ("Numéro de série Batterie" if rvd.get("Changement batterie") == "Non"
-                               else "N° série nouvelle batterie")
+        if rvd.get("Changement batterie") == "Non" :
+            battery_serial_field = "Numéro de série Batterie" 
 
-        return {
-            'Numéro de série': compare_rvd_releve(
-                rvd.get(battery_serial_field),
-                rvd.get('Numéro de série relevé 2'),
-                None,
-                image.get('serial') if image else None,
-                normalize_serial
-            ),
-            'Date de fabrication': compare_dates_with_releve(
-                rvd.get('Date fabrication BATTERIE'),
-                rvd.get('Date fabrication BATTERIE relevée'),
-                None,
-                image.get('date') if image else None
-            ),
-            'installation_date': compare_dates_with_releve(
-                rvd.get('Date mise en service BATTERIE'),
-                rvd.get('Date mise en service BATTERIE relevée'),
-                get_dae_field(aed, "Date d'installation :", 'Date de mise en service batterie'),
-                None
-            ),
-            'battery_level': compare_battery_level(rvd, aed)
-        }
+            return {
+                'Numéro de série': compare_rvd_releve(
+                    rvd.get(battery_serial_field),
+                    rvd.get('Numéro de série relevé 2'),
+                    None,
+                    image.get('serial') if image else None,
+                    normalize_serial
+                ),
+                'Date de fabrication': compare_dates_with_releve(
+                    rvd.get('Date fabrication BATTERIE'),
+                    rvd.get('Date fabrication BATTERIE relevée'),
+                    None,
+                    image.get('date') if image else None
+                ),
+                'installation_date': compare_dates_with_releve(
+                    rvd.get('Date mise en service BATTERIE'),
+                    rvd.get('Date mise en service BATTERIE relevée'),
+                    get_dae_field(aed, "Date d'installation :", 'Date de mise en service batterie'),
+                    None
+                ),
+                'battery_level': compare_battery_level(rvd, aed)
+            }
+        elif rvd.get("Changement batterie") == "Oui":
+            battery_serial_field = "N° série nouvelle batterie" 
+
+            return {
+                'Numéro de série': compare_rvd_releve(
+                    rvd.get(battery_serial_field),
+                    rvd.get('Numéro de série relevé 2'),
+                    None,
+                    image.get('serial') if image else None,
+                    normalize_serial
+                ),
+                'Date de fabrication': compare_dates_with_releve(
+                    rvd.get('Date fabrication nouvelle batterie'),
+                    rvd.get('Date fabrication BATTERIE relevée'),
+                    None,
+                    image.get('date') if image else None
+                ),
+                'installation_date': compare_dates_with_releve(
+                    rvd.get('Date de mise en service de la nouvelle batterie'),
+                    rvd.get('Date mise en service BATTERIE relevée'),
+                    get_dae_field(aed, "Date d'installation :", 'Date de mise en service batterie'),
+                    None
+                ),
+                'battery_level': compare_battery_level(rvd, aed)
+            }
+            
 
     elif section == "electrodes":
         results = {

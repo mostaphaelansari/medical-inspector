@@ -45,6 +45,7 @@ def extract_rvd_data(text: str) -> Dict[str, str]:
         "Changement batterie",
         "N° série nouvelle batterie",
         "Date mise en service",
+        "Date de mise en service de la nouvelle batterie",
         "Date fabrication nouvelle batterie",
         "Niveau de charge nouvelle batterie",
         #Electrodes Adultes
