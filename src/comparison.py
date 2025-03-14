@@ -334,5 +334,3 @@ def compare_data() -> Dict[str, Dict[str, Dict]]:
     
     st.session_state.processed_data['comparisons'] = results
     return results
-
-
