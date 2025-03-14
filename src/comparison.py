@@ -228,20 +228,22 @@ def compare_section(section: str, rvd: Dict, aed: Dict, images: List[Dict]) -> D
     """Unified comparison function with relevé data support."""
     if section == "defibrillateur":
         image = get_image_by_type(images, 'Defibrillateur G5')
+        image_serial = image.get('serial') if image else None
+        image_date = image.get('date') if image else None
         
         return {
             'Numéro de série': compare_rvd_releve(
                 rvd.get('Numéro de série DEFIBRILLATEUR'),
                 rvd.get('Numéro de série relevé'),
                 get_dae_field(aed, 'N° série DAE', 'Série DSA'),
-                image.get('serial') if image else None,
+                image_serial,
                 normalize_serial
             ),
             'date de fabrication': compare_dates_with_releve(
                 rvd.get('Date fabrication DEFIBRILLATEUR'),
                 rvd.get('Date fabrication relevée'),
                 None,
-                image.get('date') if image else None
+                image_date
             ),
             'Date de rapport': compare_dates_with_releve(
                 rvd.get('Date-Heure rapport vérification défibrillateur'),
@@ -253,57 +255,42 @@ def compare_section(section: str, rvd: Dict, aed: Dict, images: List[Dict]) -> D
 
     elif section == "batterie":
         image = get_image_by_type(images, 'Batterie')
-        if rvd.get("Changement batterie") == "Non" :
-            battery_serial_field = "Numéro de série Batterie" 
-
-            return {
-                'Numéro de série': compare_rvd_releve(
-                    rvd.get(battery_serial_field),
-                    rvd.get('Numéro de série relevé 2'),
-                    None,
-                    image.get('serial') if image else None,
-                    normalize_serial
-                ),
-                'Date de fabrication': compare_dates_with_releve(
-                    rvd.get('Date fabrication BATTERIE'),
-                    rvd.get('Date fabrication BATTERIE relevée'),
-                    None,
-                    image.get('date') if image else None
-                ),
-                'installation_date': compare_dates_with_releve(
-                    rvd.get('Date mise en service BATTERIE'),
-                    rvd.get('Date mise en service BATTERIE relevée'),
-                    get_dae_field(aed, "Date d'installation :", 'Date de mise en service batterie'),
-                    None
-                ),
-                'battery_level': compare_battery_level(rvd, aed)
-            }
-        elif rvd.get("Changement batterie") == "Oui":
-            battery_serial_field = "N° série nouvelle batterie" 
-
-            return {
-                'Numéro de série': compare_rvd_releve(
-                    rvd.get(battery_serial_field),
-                    rvd.get('Numéro de série relevé 2'),
-                    None,
-                    image.get('serial') if image else None,
-                    normalize_serial
-                ),
-                'Date de fabrication': compare_dates_with_releve(
-                    rvd.get('Date fabrication nouvelle batterie'),
-                    rvd.get('Date fabrication BATTERIE relevée'),
-                    None,
-                    image.get('date') if image else None
-                ),
-                'installation_date': compare_dates_with_releve(
-                    rvd.get('Date de mise en service de la nouvelle batterie'),
-                    rvd.get('Date mise en service BATTERIE relevée'),
-                    get_dae_field(aed, "Date d'installation :", 'Date de mise en service batterie'),
-                    None
-                ),
-                'battery_level': compare_battery_level(rvd, aed)
-            }
-            
+        image_serial = image.get('serial') if image else None
+        image_date = image.get('date') if image else None
+        is_battery_changed = rvd.get("Changement batterie") == "Oui"
+        
+        # Define field mappings based on battery change status
+        field_mapping = {
+            "serial": "N° série nouvelle batterie" if is_battery_changed else "Numéro de série Batterie",
+            "serial_releve": "N° série nouvelle batterie" if is_battery_changed else "Numéro de série relevé 2",
+            "fabrication_date": "Date fabrication nouvelle batterie" if is_battery_changed else "Date fabrication BATTERIE",
+            "fabrication_date_releve": "Date fabrication nouvelle batterie" if is_battery_changed else "Date fabrication BATTERIE relevée",
+            "installation_date": "Date de mise en service de la nouvelle batterie" if is_battery_changed else "Date mise en service BATTERIE",
+            "installation_date_releve": "Date de mise en service de la nouvelle batterie" if is_battery_changed else "Date mise en service BATTERIE relevée"
+        }
+        
+        return {
+            'Numéro de série': compare_rvd_releve(
+                rvd.get(field_mapping["serial"]),
+                rvd.get(field_mapping["serial_releve"]),
+                None,
+                image_serial,
+                normalize_serial
+            ),
+            'Date de fabrication': compare_dates_with_releve(
+                rvd.get(field_mapping["fabrication_date"]),
+                rvd.get(field_mapping["fabrication_date_releve"]),
+                None,
+                image_date
+            ),
+            'installation_date': compare_dates_with_releve(
+                rvd.get(field_mapping["installation_date"]),
+                rvd.get(field_mapping["installation_date_releve"]),
+                get_dae_field(aed, "Date d'installation :", 'Date de mise en service batterie'),
+                None
+            ),
+            'battery_level': compare_battery_level(rvd, aed)
+        }
 
     elif section == "electrodes":
         results = {

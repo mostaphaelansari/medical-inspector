@@ -1636,7 +1636,7 @@ def render_ui(client, reader):
             if rvd_data.get(i) == "Oui":
                 st.warning(f"{i} a été effectuée ⚠️")
             else:
-                st.success(f"Aucune  {i} n'est effectuée.")
+                st.success(f"Aucun  {i} n'est effectuée.")
         st.markdown("---")  # Separator
         
         # Run comparison and display dashboard
