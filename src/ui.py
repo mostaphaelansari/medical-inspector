@@ -1664,7 +1664,7 @@ def render_ui(client, reader):
                     margin-top: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                 <h2 style="color: #155724; margin-bottom: 1rem;">✅ Validation Réussie</h2>
                 <p style="color: #155724; font-size: 1.1rem;">
-                    Tous les contrôles sont réussis ! Le dispositif est conforme aux spécifications.
+                    Tous les contrôles sont réussis ! La maintenance est conforme aux spécifications.
                 </p>
                 <div style="font-size: 3rem; margin: 1rem 0;">🎉</div>
             </div>
