@@ -175,7 +175,13 @@ def extract_aed_g3_data(text: str) -> Dict[str, str]:
             
             match = re.search(pattern, text)
             if match:
-                results[key] = match.group(1).strip()
+                value = match.group(1).strip()
+                
+                # Traitement spécial pour Série DSA: supprimer le premier 0
+                if key == "Série DSA" and value and value[0] == "0":
+                    value = value[1:]
+                
+                results[key] = value
             else:
                 results[key] = ""
         
