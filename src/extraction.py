@@ -2,7 +2,7 @@
 
 import re
 import pdfplumber
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional ,Any
 from PIL import Image, ImageEnhance, ImageFilter
 from pyzbar.pyzbar import decode
 import streamlit as st
@@ -145,7 +145,7 @@ def extract_aed_g5_data(text: str) -> Dict[str, any]:
     
     return results
 
-def extract_aed_g3_data(text: str) -> Dict[str, str]:
+def extract_aed_g3_data(text: str) -> Dict[str, Any]:
     """Extrait des mots-clés spécifiques d'un texte de rapport AED.
     
     Args:
@@ -166,9 +166,9 @@ def extract_aed_g3_data(text: str) -> Dict[str, str]:
     
     # Dictionnaire pour stocker les résultats
     results = {}
-    
+
     try:
-        # Pour chaque mot-clé standard, chercher sa valeur dans le texte
+        # Extraction des valeurs pour les mots-clés standards
         for key, pattern_base in keywords.items():
             pattern_escaped = re.escape(pattern_base)
             pattern = f"{pattern_escaped}\\s*:\\s*([^\\n]+)"
@@ -184,45 +184,49 @@ def extract_aed_g3_data(text: str) -> Dict[str, str]:
                 results[key] = value
             else:
                 results[key] = ""
-        
-        # Traitement spécial pour les capacités de batterie - extraction en mAh puis conversion en V
-        # Pour la capacité initiale
+
+        # Extraction et conversion des capacités de batterie
         match_initial = re.search(r"Capacité initiale de la batterie 12V\s*:\s*(\d+)\s*mAh", text)
-        if match_initial:
-            mah_value = float(match_initial.group(1))
-            # Conversion approximative de mAh à V (à ajuster selon les spécifications)
-            v_value = (mah_value / 625)
-            results["Capacité initiale de la batterie"] = f"{v_value:.2f} V"
+        match_remaining = re.search(r"Capacité restante de la batterie 12V\s*:\s*(\d+)\s*mAh", text)
+
+        if match_initial and match_remaining:
+            initial_mAh = float(match_initial.group(1))
+            remaining_mAh = float(match_remaining.group(1))
+
+            # Conversion en volts
+            initial_V = initial_mAh / 625  # Approximate conversion
+            remaining_V = remaining_mAh / 625
+
+            # Calcul du pourcentage de batterie restante
+            battery_percentage = (remaining_mAh / initial_mAh) * 100
+
+            results["Capacité initiale de la batterie"] = f"{initial_V:.2f} V"
+            results["Capacité restante de la batterie"] = f"{remaining_V:.2f} V"
+            results["Pourcentage de la batterie"] = f"{battery_percentage:.2f} %"
         else:
             results["Capacité initiale de la batterie"] = ""
-        
-        # Pour la capacité restante
-        match_remaining = re.search(r"Capacité restante de la batterie 12V\s*:\s*(\d+)\s*mAh", text)
-        if match_remaining:
-            mah_value = float(match_remaining.group(1))
-            # Conversion approximative de mAh à V
-            v_value = (mah_value / 625)
-            results["Capacité restante de la batterie"] = f"{v_value:.2f} V"
-        else:
             results["Capacité restante de la batterie"] = ""
-        
-        # Extract errors (code d'erreur avec date/heure)
+            results["Pourcentage de la batterie"] = ""
+
+        # Extraction des erreurs (codes d'erreur avec date/heure)
         errors = re.findall(r"(Code d'erreur \w+)\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}:\d{2})", text)
         results["errors"] = [(f"{date} {time}", code) for code, date, time in errors]
-        
-        # Print error information
-        if results["errors"]:
-            print("Errors found:")
-            for error in results["errors"]:
-                print(f"Date/Time: {error[0]}, Error ID: {error[1]}")
+
+        # Extraction de la dernière date d'installation depuis "Aucune erreur trouvée"
+        date_pattern = r"Aucune erreur trouvée (\d{2}/\d{2}/\d{4}) \d{2}:\d{2}:\d{2} .+"
+        dates_found = re.findall(date_pattern, text)
+
+        if dates_found:
+            results["Date d'installation"] = dates_found[-1]  # Dernière date trouvée
         else:
-            print("No errors found in the section.")
-        
+            results["Date d'installation"] = ""
+
         return results
-        
+
     except Exception as e:
         print(f"Erreur lors de l'extraction des données: {e}")
         return {"erreur": str(e)}
+
 
 
 def extract_important_info_g3(results: List[Tuple]) -> Tuple[Optional[str], Optional[str]]:
