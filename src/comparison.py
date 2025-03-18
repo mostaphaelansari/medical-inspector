@@ -289,7 +289,7 @@ def compare_section(section: str, rvd: Dict, aed: Dict, images: List[Dict]) -> D
                 get_dae_field(aed, "Date d'installation :", 'Date de mise en service batterie'),
                 None
             ),
-            'Niveau_de_batterie': compare_battery_level(rvd, aed)
+            'battery_level': compare_battery_level(rvd, aed)
         }
 
     elif section == "electrodes":
