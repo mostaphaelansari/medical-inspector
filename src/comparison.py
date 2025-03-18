@@ -193,16 +193,18 @@ def compare_electrodes_section(rvd: Dict, images: List[Dict], section_type: str)
    
     serial_fields = (
         f'Numéro de série ELECTRODES {prefix}',
+        f'Numéro de série ELECTRODES {prefix} relevé',
         f'N° série nouvelles électrodes'
     )
     date_fields = (
         f'Date de péremption ELECTRODES {prefix}',
+        f'Date de péremption ELECTRODES {prefix} relevée',
         f'Date péremption des nouvelles éléctrodes'
     )
    
     results = {}
     
-    # Check if the first serial field is NOT 'Électrodes RCP ?'
+    
     if rvd.get(serial_fields[0]) != 'Non trouvé':
         results['Numéro_de_série'] = compare_rvd_releve(
             rvd.get(serial_fields[0]),
@@ -218,7 +220,7 @@ def compare_electrodes_section(rvd: Dict, images: List[Dict], section_type: str)
             image.get('date') if image else None
         )
     else:
-        # If the serial number is 'Électrodes RCP ?', set results to None or an appropriate value
+      
         results['Numéro_de_série'] = None
         results['date_de_péremption'] = None
    
