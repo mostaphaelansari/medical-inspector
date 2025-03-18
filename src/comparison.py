@@ -283,13 +283,13 @@ def compare_section(section: str, rvd: Dict, aed: Dict, images: List[Dict]) -> D
                 None,
                 image_date
             ),
-            'installation_date': compare_dates_with_releve(
+            "Date_d_'_installation": compare_dates_with_releve(
                 rvd.get(field_mapping["installation_date"]),
                 rvd.get(field_mapping["installation_date_releve"]),
                 get_dae_field(aed, "Date d'installation :", 'Date de mise en service batterie'),
                 None
             ),
-            'battery_level': compare_battery_level(rvd, aed)
+            'Niveau_de_batterie': compare_battery_level(rvd, aed)
         }
 
     elif section == "electrodes":
