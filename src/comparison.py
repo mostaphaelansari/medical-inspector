@@ -14,6 +14,7 @@ BATTERY_LEVEL_PATTERN = re.compile(r'\d+')
 # Constants to avoid string duplication
 NA = 'N/A'
 G5_TYPE = 'G5'
+G3_TYPE = 'G3'
 
 # Common date formats consolidated in one place
 DATE_FORMATS = [
@@ -133,54 +134,134 @@ def get_dae_field(aed: Dict, field_g5: str, field_other: str) -> Optional[str]:
     is_g5 = st.session_state.get('dae_type') == G5_TYPE
     return aed.get(field_g5 if is_g5 else field_other)
 
-def compare_battery_level(rvd: Dict, aed: Dict) -> Dict:
+from .extraction import extract_aed_g3_data
+
+def compare_battery_level(rvd, aed_str):
     """Compare battery levels from RVD and AED with improved error handling and data validation."""
     result = {'match': False}
     
-    try:
-        # Extract RVD battery level
-        rvd_batt_str = rvd.get('Niveau de charge de la batterie en %')
-        if rvd.get('Changement batterie') == "Oui":
-            rvd_batt_str = rvd.get('Niveau de charge nouvelle batterie')
-        if not rvd_batt_str or rvd_batt_str == "Non trouvé":
-            result['error'] = "Missing RVD battery data"
-            return result
-        
-        # Clean and convert RVD battery level to float
-        rvd_batt_cleaned = re.sub(r'[^\d.]', '', rvd_batt_str)
-        if not rvd_batt_cleaned:
-            result['error'] = "Invalid RVD battery level format"
-            return result
-        
-        rvd_batt = float(rvd_batt_cleaned)
-        result['rvd'] = f"{rvd_batt}%"
-        
-        # Extract AED battery level based on device type
-        is_g5 = st.session_state.get('dae_type') == G5_TYPE
-        aed_batt_text = aed.get(
-            'Capacité restante de la batterie' if is_g5 else 'Capacité restante de la batterie 12V'
-        )
-        
-        if not aed_batt_text or aed_batt_text == "Non trouvé":
-            result['error'] = "Missing AED battery data"
-            return result
-        
-        # Clean and convert AED battery level to float
-        aed_batt_match = BATTERY_LEVEL_PATTERN.search(aed_batt_text)
-        if not aed_batt_match:
-            result['error'] = "Cannot extract battery level from AED data"
-            return result
-        
-        aed_batt = float(aed_batt_match.group())
-        result['aed'] = f"{aed_batt}%"
-        
-        # Compare battery levels with a tolerance of ±2%
-        result['match'] = abs(rvd_batt - aed_batt) <= 2
-        
-    except Exception as e:
-        result['error'] = f"Unexpected error: {str(e)}"
+    # Check device type
+    dae_type = st.session_state.get('dae_type')
+    is_g5 = dae_type == G5_TYPE
+    is_g3 = dae_type == G3_TYPE
     
-    return result
+    # Handle G5 devices
+    if is_g5:
+        try:
+            # Extract RVD battery level
+            rvd_batt_str = rvd.get('Niveau de charge de la batterie en %')
+            if rvd.get('Changement batterie') == "Oui":
+                rvd_batt_str = rvd.get('Niveau de charge nouvelle batterie')
+            
+            if not rvd_batt_str or rvd_batt_str == "Non trouvé":
+                result['error'] = "Missing RVD battery data"
+                return result
+            
+            # Clean and convert RVD battery level to float
+            rvd_batt_cleaned = re.sub(r'[^\d.]', '', rvd_batt_str)
+            if not rvd_batt_cleaned:
+                result['error'] = "Invalid RVD battery level format"
+                return result
+            
+            rvd_batt = float(rvd_batt_cleaned)
+            result['rvd'] = f"{rvd_batt}%"
+            
+            # Check if aed_str is already a dictionary or a string
+            if isinstance(aed_str, dict):
+                # If it's a dictionary, extract the battery level directly
+                aed_batt_str = aed_str.get('Capacité restante de la batterie', '')
+                if not aed_batt_str:
+                    result['error'] = "Missing AED battery data in dictionary"
+                    return result
+                    
+                # Clean and convert AED battery string to float
+                aed_batt_cleaned = re.sub(r'[^\d.]', '', aed_batt_str)
+                if not aed_batt_cleaned:
+                    result['error'] = "Invalid AED battery level format in dictionary"
+                    return result
+                    
+                aed_batt = float(aed_batt_cleaned)
+            else:
+                # Extract AED battery level for G5 from the text string
+                battery_pattern = re.compile(r"Capacité restante de la batterie\s*:?\s*(\d+\.?\d*)%?")
+                aed_batt_match = battery_pattern.search(aed_str)
+                
+                if not aed_batt_match:
+                    result['error'] = "Missing AED battery data in string"
+                    return result
+                
+                # Extract and convert AED battery level to float
+                aed_batt = float(aed_batt_match.group(1))
+            
+            result['aed'] = f"{aed_batt}%"
+            
+            # Compare battery levels with a tolerance of ±2%
+            result['match'] = abs(rvd_batt - aed_batt) <= 2
+            
+        except Exception as e:
+            result['error'] = f"Unexpected error in G5 processing: {str(e)}"
+        
+        return result
+    
+    # Handle G3 devices    
+    elif is_g3:
+        try:
+            # Extract RVD battery level
+            rvd_batt_str = rvd.get('Niveau de charge de la batterie en %')
+            if rvd.get('Changement batterie') == "Oui":
+                rvd_batt_str = rvd.get('Niveau de charge nouvelle batterie')
+            
+            if not rvd_batt_str or rvd_batt_str == "Non trouvé":
+                result['error'] = "Missing RVD battery data"
+                return result
+                
+            # Clean and convert RVD battery level to float
+            rvd_batt_cleaned = re.sub(r'[^\d.]', '', rvd_batt_str)
+            if not rvd_batt_cleaned:
+                result['error'] = "Invalid RVD battery level format"
+                return result
+            
+            rvd_batt = float(rvd_batt_cleaned)
+            result['rvd'] = f"{rvd_batt}%"
+            
+            # Check if aed_str is already a dictionary or a string
+            if isinstance(aed_str, dict):
+                aed_data = aed_str
+            else:
+                aed_data = extract_aed_g3_data(aed_str)
+            
+            # Add debugging information
+            print("AED Data:", aed_data)
+            print("Battery Percentage:", aed_data.get("Pourcentage de la batterie", "NOT FOUND"))
+            
+            # Check if we have a battery percentage value
+            battery_percentage = aed_data.get("Pourcentage de la batterie", "")
+            if not battery_percentage or battery_percentage == "Non trouvé":
+                result['error'] = "Missing AED battery percentage data"
+                return result
+            
+            # Extract numeric value from the percentage string
+            aed_batt_cleaned = re.sub(r'[^\d.]', '', battery_percentage)
+            if not aed_batt_cleaned:
+                result['error'] = "Invalid AED battery percentage format"
+                return result
+            
+            aed_batt = float(aed_batt_cleaned)
+            result['aed'] = f"{aed_batt}%"
+            
+            # Compare battery levels with a tolerance of ±2%
+            result['match'] = abs(rvd_batt - aed_batt) <= 2
+            
+        except Exception as e:
+            result['error'] = f"Unexpected error in G3 processing: {str(e)}"
+            print(f"Exception details: {e}")  # Add detailed error logging
+        
+        return result
+    
+    # Handle unsupported device types
+    else:
+        result['error'] = f"Unsupported device type: {dae_type}"
+        return result
 
 def compare_electrodes_section(rvd: Dict, images: List[Dict], section_type: str) -> Dict:
     """
@@ -193,18 +274,16 @@ def compare_electrodes_section(rvd: Dict, images: List[Dict], section_type: str)
    
     serial_fields = (
         f'Numéro de série ELECTRODES {prefix}',
-        f'Numéro de série ELECTRODES {prefix} relevé',
         f'N° série nouvelles électrodes'
     )
     date_fields = (
         f'Date de péremption ELECTRODES {prefix}',
-        f'Date de péremption ELECTRODES {prefix} relevée',
         f'Date péremption des nouvelles éléctrodes'
     )
    
     results = {}
     
-    
+    # Check if the first serial field is NOT 'Électrodes RCP ?'
     if rvd.get(serial_fields[0]) != 'Non trouvé':
         results['Numéro_de_série'] = compare_rvd_releve(
             rvd.get(serial_fields[0]),
@@ -220,7 +299,7 @@ def compare_electrodes_section(rvd: Dict, images: List[Dict], section_type: str)
             image.get('date') if image else None
         )
     else:
-      
+        # If the serial number is 'Électrodes RCP ?', set results to None or an appropriate value
         results['Numéro_de_série'] = None
         results['date_de_péremption'] = None
    
@@ -285,7 +364,7 @@ def compare_section(section: str, rvd: Dict, aed: Dict, images: List[Dict]) -> D
                 None,
                 image_date
             ),
-            "Date_d_'_installation": compare_dates_with_releve(
+            'installation_date': compare_dates_with_releve(
                 rvd.get(field_mapping["installation_date"]),
                 rvd.get(field_mapping["installation_date_releve"]),
                 get_dae_field(aed, "Date d'installation :", 'Date de mise en service batterie'),
