@@ -410,7 +410,7 @@ def compare_section(section: str, rvd: Dict, aed: Any, images: List[Dict]) -> Di
             g3_date = aed.get('Date de mise en service', '')
             battery_percentage = aed.get('Pourcentage de la batterie', '')
             numero_de_serie = aed.get('Numéro de lot', '')
-            
+            print(f"Battery percentage is: {battery_percentage}")
             return {
                 'Numéro de série': compare_rvd_releve(
                     rvd.get(field_mapping["serial"]),
