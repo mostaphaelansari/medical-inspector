@@ -9,7 +9,6 @@ from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict
 import zipfile
-import dropbox
 import altair as alt
 import pandas as pd
 import plotly.express as px
@@ -1739,6 +1738,7 @@ def render_ui(client, reader):
         
     with tab4:
         st.title("📤 Export automatisé")
+        
         with st.container():
             col_config, col_preview = st.columns([1, 2])
         
@@ -1747,7 +1747,7 @@ def render_ui(client, reader):
                     st.markdown("#### ⚙️ Paramètres d'export")
                     include_images = st.checkbox("Inclure les images", True)
                     st.markdown("---")
-                
+                    
                     if st.form_submit_button("Générer un package d'export"):
                         if not st.session_state.get('processed_data', {}).get('RVD'):
                             st.warning("Aucune donnée RVD disponible pour le nommage")
@@ -1756,39 +1756,29 @@ def render_ui(client, reader):
                             code_site = st.session_state.processed_data['RVD'].get('Code du site', 'INCONNU')
                             date_str = datetime.now().strftime("%Y%m%d")
                             
-                            # Create a temporary directory to store files for zipping
                             with tempfile.TemporaryDirectory() as temp_dir:
                                 exported_files = []
                                 
-                                # Process uploaded files
                                 if 'uploaded_files' in st.session_state:
                                     for file in st.session_state.uploaded_files:
-                                        # Handle PDFs
-                                        if file.type == "application/pdf":
-                                            # Generate appropriate file name based on content
-                                            if 'rapport de vérification' in file.name.lower():
-                                                file_name = f"LCC_{code_site}_RVD_{date_str}.pdf"
-                                            else:
-                                                file_name = f"LCC_{st.session_state.dae_type}_{code_site}_AEDR{date_str}.pdf"
-                                            
-                                            file_path = os.path.join(temp_dir, file_name)
-                                            with open(file_path, "wb") as f:
-                                                f.write(file.getvalue())
-                                            exported_files.append(file_name)
+                                        file_extension = os.path.splitext(file.name)[1]
                                         
-                                        # Process images if included
-                                        if include_images and file.type.startswith("image/"):
-                                            # Clean original filename to avoid special characters
+                                        if file.type == "application/pdf":
+                                            file_name = f"LCC_{code_site}_RVD_{date_str}.pdf" if 'rapport de vérification' in file.name.lower() else f"LCC_{st.session_state.dae_type}_{code_site}_AEDR{date_str}.pdf"
+                                        
+                                        elif include_images and file.type.startswith("image/"):
                                             clean_name = ''.join(c if c.isalnum() or c in ['.', '_', '-'] else '_' for c in file.name)
                                             file_name = f"LCC_{code_site}_{date_str}_{clean_name}"
-                                            file_path = os.path.join(temp_dir, file_name)
-                                            with open(file_path, "wb") as f:
-                                                f.write(file.getvalue())
-                                            exported_files.append(file_name)
+                                        
+                                        else:
+                                            continue
+                                        
+                                        file_path = os.path.join(temp_dir, file_name)
+                                        with open(file_path, "wb") as f:
+                                            f.write(file.getvalue())
+                                        exported_files.append(file_name)
                                 
-                                # Create zip file if we have files to export
                                 if exported_files:
-                                    # Create a zip file
                                     zip_filename = f"Export_{code_site}_{date_str}.zip"
                                     zip_path = os.path.join(temp_dir, zip_filename)
                                     
@@ -1796,28 +1786,20 @@ def render_ui(client, reader):
                                         for file in exported_files:
                                             zipf.write(os.path.join(temp_dir, file), arcname=file)
                                     
-                                    # Use Streamlit to allow user to download the zip
                                     with open(zip_path, "rb") as f:
-                                        zip_data = f.read()
+                                        st.session_state.zip_data = f.read()
                                         
-                                    # Store zip data in session state for download button access
-                                    st.session_state.zip_data = zip_data
                                     st.session_state.zip_filename = zip_filename
-                                    st.session_state.zip_path = zip_path
-                                    
-                                    # Make a copy of the zip file to a persistent location
-                                    
-                                    
                                     st.success(f"Package d'export généré avec succès ({len(exported_files)} fichiers)")
                         except Exception as e:
                             st.error(f"Erreur lors de la génération du package: {str(e)}")
             
             with col_preview:
                 st.markdown("#### 👁️ Aperçu des fichiers")
-                if st.session_state.get('uploaded_files'):
+                
+                if 'uploaded_files' in st.session_state and st.session_state.uploaded_files:
                     file_list = []
-                    pdf_count = 0
-                    image_count = 0
+                    pdf_count, image_count = 0, 0
                     
                     for file in st.session_state.uploaded_files:
                         if file.type == "application/pdf":
@@ -1835,70 +1817,26 @@ def render_ui(client, reader):
                             "Taille": f"{len(file.getvalue()) / 1024:.1f} KB"
                         })
                     
-                    if file_list:
-                        # Show summary stats
-                        st.markdown(f"""
-                        **Résumé des fichiers :**
-                        - Total: {len(file_list)} fichier(s)
-                        - PDF: {pdf_count} fichier(s)
-                        - Images: {image_count} fichier(s)
-                        """)
-                        
-                        # Show detailed table
-                        st.dataframe(
-                            file_list,
-                            column_config={
-                                "Type": st.column_config.TextColumn("Type"),
-                                "Nom original": st.column_config.TextColumn("Nom original"),
-                                "Taille": st.column_config.TextColumn("Taille")
-                            },
-                            hide_index=True
+                    st.markdown(f"""
+                    **Résumé des fichiers :**
+                    - Total: {len(file_list)} fichier(s)
+                    - PDF: {pdf_count} fichier(s)
+                    - Images: {image_count} fichier(s)
+                    """)
+                    
+                    st.dataframe(file_list, hide_index=True)
+                    
+                    if 'zip_data' in st.session_state and 'zip_filename' in st.session_state:
+                        st.download_button(
+                            label="⬇️ Télécharger le package",
+                            data=st.session_state.zip_data,
+                            file_name=st.session_state.zip_filename,
+                            mime="application/zip"
                         )
-                        
-                        # Show download buttons if zip has been created
-                        if 'zip_data' in st.session_state and 'zip_filename' in st.session_state:
-                            st.download_button(
-                                label="⬇️ Télécharger le package",
-                                data=st.session_state.zip_data,
-                                file_name=st.session_state.zip_filename,
-                                mime="application/zip"
-                            )
-                            
-                            # Dropbox upload button
-                            if st.button("📤 Envoyer vers Dropbox"):
-                                if 'zip_data' in st.session_state:
-                                    # Create a temporary file with a more controlled lifecycle
-                                    temp_file_path = None
-                                    try:
-                                        # Create a named temporary file but close it immediately
-                                        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                                            temp_file_path = temp_file.name
-                                            temp_file.write(st.session_state.zip_data)
-                                            # File is automatically closed when exiting this block
-                                        
-                                        # Now upload the file
-                                        dropbox_path = f"/Exports/{st.session_state.zip_filename}"
-                                        success, message = upload_to_dropbox(temp_file_path, dropbox_path)
-                                        if success:
-                                            st.success(f"Fichier uploadé sur Dropbox : {dropbox_path}")
-                                        else:
-                                            st.error(f"Échec de l'upload : {message}")
-                                    except Exception as e:
-                                        st.error(f"Erreur lors de l'upload : {str(e)}")
-                                    finally:
-                                        # Clean up the temporary file
-                                        if temp_file_path and os.path.exists(temp_file_path):
-                                            try:
-                                                os.remove(temp_file_path)
-                                            except:
-                                                pass  # Silently fail if we can't remove the temp file
-                                else:
-                                    st.error("Données du package non disponibles. Veuillez regénérer le package.")
-                    else:
-                        st.info("Aucun fichier disponible pour l'export")
                 else:
                     st.markdown("""
                         <div style="opacity:0.5; text-align:center; padding:2rem; border:1px dashed #ccc; border-radius:5px;">
                             ⚠️ Aucun fichier uploadé
                         </div>
                     """, unsafe_allow_html=True)
+
