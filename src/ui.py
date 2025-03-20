@@ -803,33 +803,6 @@ def render_ui(client, reader):
         </div>
         """, unsafe_allow_html=True)
 
-    # Initialize Dropbox outside the function for global use
-    DROPBOX_ACCESS_TOKEN = st.secrets["DROPBOX_ACCESS_TOKEN"]
-
-    # Create a persistent temp directory for the session
-    if 'temp_dir' not in st.session_state:
-        st.session_state.temp_dir = tempfile.mkdtemp()
-
-    def upload_to_dropbox(file_path, dropbox_path):
-        """Upload file to Dropbox."""
-        try:
-            dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-            if not os.path.exists(file_path):
-                return False, f"File not found: {file_path}"
-                
-            with open(file_path, "rb") as f:
-                dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("overwrite"))
-            return True, dropbox_path
-        except Exception as e:
-            return False, str(e)
-
-    # Test Dropbox connection once at startup
-    try:
-        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        account = dbx.users_get_current_account()
-        print(f"Connected to Dropbox: {account.name.display_name}")
-    except Exception as e:
-        print(f"Error connecting to Dropbox: {e}")
 
     # Ensure session state initialization
     if 'uploaded_files' not in st.session_state:
