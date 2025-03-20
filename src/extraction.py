@@ -218,7 +218,7 @@ def extract_aed_g3_data(text: str) -> Dict[str, Any]:
 
         # Extraction de la dernière date d'installation depuis "Aucune erreur trouvée"
         # Modifié pour tenir compte du format réel sans espace entre "trouvée" et la date
-        date_pattern = r"Aucune erreur trouvée(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}:\d{2})"
+        date_pattern = r"Aucune erreur trouvée\s*(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}:\d{2})"
         dates_found = re.findall(date_pattern, text)
 
         if dates_found:
