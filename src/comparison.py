@@ -303,34 +303,67 @@ def compare_electrodes_section(rvd: Dict, images: List[Dict], section_type: str)
    
     return results
 
-def compare_section(section: str, rvd: Dict, aed: Dict, images: List[Dict]) -> Dict:
+def compare_section(section: str, rvd: Dict, aed: Any, images: List[Dict]) -> Dict:
     """Unified comparison function with relevé data support."""
+    # Check device type
+    dae_type = st.session_state.get('dae_type')
+    is_g5 = dae_type == G5_TYPE
+    is_g3 = dae_type == G3_TYPE
+
     if section == "defibrillateur":
         image = get_image_by_type(images, 'Defibrillateur G5')
         image_serial = image.get('serial') if image else None
         image_date = image.get('date') if image else None
         
-        return {
-            'Numéro de série': compare_rvd_releve(
-                rvd.get('Numéro de série DEFIBRILLATEUR'),
-                rvd.get('Numéro de série relevé'),
-                get_dae_field(aed, 'N° série DAE', 'Série DSA'),
-                image_serial,
-                normalize_serial
-            ),
-            'date de fabrication': compare_dates_with_releve(
-                rvd.get('Date fabrication DEFIBRILLATEUR'),
-                rvd.get('Date fabrication relevée'),
-                None,
-                image_date
-            ),
-            'Date de rapport': compare_dates_with_releve(
-                rvd.get('Date-Heure rapport vérification défibrillateur'),
-                None,
-                get_dae_field(aed, 'Date / Heure:', 'Date de mise en service'),
-                None
-            )
-        }
+        if is_g5:
+            # G5 code remains the same
+            return {
+                'Numéro de série': compare_rvd_releve(
+                    rvd.get('Numéro de série DEFIBRILLATEUR'),
+                    rvd.get('Numéro de série relevé'),
+                    get_dae_field(aed, 'N° série DAE', 'Série DSA'),
+                    image_serial,
+                    normalize_serial
+                ),
+                'date de fabrication': compare_dates_with_releve(
+                    rvd.get('Date fabrication DEFIBRILLATEUR'),
+                    rvd.get('Date fabrication relevée'),
+                    None,
+                    image_date
+                ),
+                'Date de rapport': compare_dates_with_releve(
+                    rvd.get('Date-Heure rapport vérification défibrillateur'),
+                    None,
+                    get_dae_field(aed, 'Date / Heure:', 'Date de mise en service'),
+                    None
+                )
+            }
+        elif is_g3:
+            # For G3, aed is already a dictionary - use it directly
+            g3_serial = aed.get('Série DSA', '')
+            g3_date = aed.get('Date installation', aed.get('Date de mise en service', ''))
+            
+            return {
+                'Numéro de série': compare_rvd_releve(
+                    rvd.get('Numéro de série DEFIBRILLATEUR'),
+                    rvd.get('Numéro de série relevé'),
+                    g3_serial,
+                    image_serial,
+                    normalize_serial
+                ),
+                'date de fabrication': compare_dates_with_releve(
+                    rvd.get('Date fabrication DEFIBRILLATEUR'),
+                    rvd.get('Date fabrication relevée'),
+                    None,
+                    image_date
+                ),
+                'Date de rapport': compare_dates_with_releve(
+                    rvd.get('Date-Heure rapport vérification défibrillateur'),
+                    None,
+                    g3_date,
+                    None
+                )
+            }
 
     elif section == "batterie":
         image = get_image_by_type(images, 'Batterie')
@@ -348,28 +381,58 @@ def compare_section(section: str, rvd: Dict, aed: Dict, images: List[Dict]) -> D
             "installation_date_releve": "Date de mise en service de la nouvelle batterie" if is_battery_changed else "Date mise en service BATTERIE relevée"
         }
         
-        return {
-            'Numéro de série': compare_rvd_releve(
-                rvd.get(field_mapping["serial"]),
-                rvd.get(field_mapping["serial_releve"]),
-                None,
-                image_serial,
-                normalize_serial
-            ),
-            'Date de fabrication': compare_dates_with_releve(
-                rvd.get(field_mapping["fabrication_date"]),
-                rvd.get(field_mapping["fabrication_date_releve"]),
-                None,
-                image_date
-            ),
-            'installation_date': compare_dates_with_releve(
-                rvd.get(field_mapping["installation_date"]),
-                rvd.get(field_mapping["installation_date_releve"]),
-                get_dae_field(aed, "Date d'installation :", 'Date de mise en service batterie'),
-                None
-            ),
-            'battery_level': compare_battery_level(rvd, aed)
-        }
+        if is_g5: 
+            # G5 code remains the same
+            return {
+                'Numéro de série': compare_rvd_releve(
+                    rvd.get(field_mapping["serial"]),
+                    rvd.get(field_mapping["serial_releve"]),
+                    None,
+                    image_serial,
+                    normalize_serial
+                ),
+                'Date de fabrication': compare_dates_with_releve(
+                    rvd.get(field_mapping["fabrication_date"]),
+                    rvd.get(field_mapping["fabrication_date_releve"]),
+                    None,
+                    image_date
+                ),
+                'installation_date': compare_dates_with_releve(
+                    rvd.get(field_mapping["installation_date"]),
+                    rvd.get(field_mapping["installation_date_releve"]),
+                    get_dae_field(aed, "Date d'installation :", 'Date de mise en service batterie'),
+                    None
+                ),
+                'battery_level': compare_battery_level(rvd, aed)
+            }
+        elif is_g3:
+            # For G3, aed is already a dictionary - use it directly
+            g3_date = aed.get('Date de mise en service', '')
+            battery_percentage = aed.get('Pourcentage de la batterie', '')
+            numero_de_serie = aed.get('Numéro de lot', '')
+            
+            return {
+                'Numéro de série': compare_rvd_releve(
+                    rvd.get(field_mapping["serial"]),
+                    rvd.get(field_mapping["serial_releve"]),
+                    numero_de_serie,
+                    image_serial,
+                    normalize_serial
+                ),  
+                'Date de fabrication': compare_dates_with_releve(
+                    rvd.get(field_mapping["fabrication_date"]),
+                    rvd.get(field_mapping["fabrication_date_releve"]),
+                    None,
+                    image_date
+                ),
+                'installation_date': compare_dates_with_releve(
+                    rvd.get(field_mapping["installation_date"]),
+                    rvd.get(field_mapping["installation_date_releve"]),
+                    g3_date,
+                    None
+                ),
+                'battery_level': compare_battery_level(rvd, aed)
+            }
 
     elif section == "electrodes":
         results = {
