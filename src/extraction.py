@@ -213,13 +213,16 @@ def extract_aed_g3_data(text: str) -> Dict[str, Any]:
         results["errors"] = [(f"{date} {time}", code) for code, date, time in errors]
 
         # Extraction de la dernière date d'installation depuis "Aucune erreur trouvée"
-        date_pattern = r"Aucune erreur trouvée (\d{2}/\d{2}/\d{4}) \d{2}:\d{2}:\d{2} .+"
+        # Modifié pour tenir compte du format réel sans espace entre "trouvée" et la date
+        date_pattern = r"Aucune erreur trouvée(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}:\d{2})"
         dates_found = re.findall(date_pattern, text)
 
         if dates_found:
-            results["Date d'installation"] = dates_found[-1]  # Dernière date trouvée
+            # dates_found contient maintenant une liste de tuples (date, heure)
+            last_date, last_time = dates_found[-1]  # Prendre la dernière occurrence
+            results["Date installation"] = f"{last_date} {last_time}"
         else:
-            results["Date d'installation"] = ""
+            results["Date installation"] = ""
 
         return results
 
