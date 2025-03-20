@@ -181,17 +181,13 @@ def extract_aed_g3_data(text: str) -> Dict[str, Any]:
                 if key == "Série DSA" and value and value[0] == "0":
                     value = value[1:]
                 
-                # Traitement spécial pour Numéro de lot: insérer un '-' après le 5ème chiffre
-                if key == "Numéro de lot" and len(value) > 5:
-                    value = value[:5] + "-" + value[5:]
-                
                 results[key] = value
             else:
                 results[key] = ""
 
         # Extraction et conversion des capacités de batterie
-        match_initial = re.search(r"Capacité initiale de la batterie 12V\\s*:\\s*(\\d+)\\s*mAh", text)
-        match_remaining = re.search(r"Capacité restante de la batterie 12V\\s*:\\s*(\\d+)\\s*mAh", text)
+        match_initial = re.search(r"Capacité initiale de la batterie 12V\s*:\s*(\d+)\s*mAh", text)
+        match_remaining = re.search(r"Capacité restante de la batterie 12V\s*:\s*(\d+)\s*mAh", text)
 
         if match_initial and match_remaining:
             initial_mAh = float(match_initial.group(1))
@@ -213,14 +209,16 @@ def extract_aed_g3_data(text: str) -> Dict[str, Any]:
             results["Pourcentage de la batterie"] = ""
 
         # Extraction des erreurs (codes d'erreur avec date/heure)
-        errors = re.findall(r"(Code d'erreur \\w+)\\s+(\\d{2}/\\d{2}/\\d{4})\\s+(\\d{2}:\\d{2}:\\d{2})", text)
+        errors = re.findall(r"(Code d'erreur \w+)\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}:\d{2})", text)
         results["errors"] = [(f"{date} {time}", code) for code, date, time in errors]
 
         # Extraction de la dernière date d'installation depuis "Aucune erreur trouvée"
-        date_pattern = r"Aucune erreur trouvée(\\d{2}/\\d{2}/\\d{4})\\s+(\\d{2}:\\d{2}:\\d{2})"
+        # Modifié pour tenir compte du format réel sans espace entre "trouvée" et la date
+        date_pattern = r"Aucune erreur trouvée(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}:\d{2})"
         dates_found = re.findall(date_pattern, text)
 
         if dates_found:
+            # dates_found contient maintenant une liste de tuples (date, heure)
             last_date, last_time = dates_found[-1]  # Prendre la dernière occurrence
             results["Date installation"] = f"{last_date} {last_time}"
         else:
