@@ -230,9 +230,7 @@ def compare_battery_level(rvd, aed_str):
             else:
                 aed_data = extract_aed_g3_data(aed_str)
             
-            # Add debugging information
-            print("AED Data:", aed_data)
-            print("Battery Percentage:", aed_data.get("Pourcentage de la batterie", "NOT FOUND"))
+            
             
             # Check if we have a battery percentage value
             battery_percentage = aed_data.get("Pourcentage de la batterie", "")
