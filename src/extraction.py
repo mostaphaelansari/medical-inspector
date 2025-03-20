@@ -181,6 +181,10 @@ def extract_aed_g3_data(text: str) -> Dict[str, Any]:
                 if key == "Série DSA" and value and value[0] == "0":
                     value = value[1:]
                 
+                # Traitement spécial pour Numéro de lot: insérer un '-' après le 5ème chiffre
+                if key == "Numéro de lot" and len(value) > 5:
+                    value = value[:5] + "-" + value[5:]
+                
                 results[key] = value
             else:
                 results[key] = ""
