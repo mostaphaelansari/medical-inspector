@@ -1752,7 +1752,7 @@ def render_ui(client, reader):
                                         exported_files.append(file_name)
                                 
                                 if exported_files:
-                                    zip_filename = f"Export_{code_site}_{date_str}.zip"
+                                    zip_filename = f"LCC_{code_site}_Entretien_{date_str}.zip"
                                     zip_path = os.path.join(temp_dir, zip_filename)
                                     
                                     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
