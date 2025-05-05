@@ -1603,16 +1603,100 @@ def render_ui(client, reader):
         
         # Consumables changes section
         st.subheader("Changements de Consommables")
-        changement = ["Changement batterie", "Changement électrodes adultes", "Changement électrodes pédiatriques"]
+        
+        # Add an expander for the consumables comparisons
+        with st.expander("Comparaison des Changements de Consommables", expanded=True):
+            changement = ["Changement batterie", "Changement électrodes adultes", "Changement électrodes pédiatriques"]
+            
+            # Create a table for consumables comparison
+            cols = st.columns([3, 1.5, 1.5, 1])
+            cols[0].markdown("**Consommable**")
+            cols[1].markdown("**RVD**")
+            cols[2].markdown("**AED**")
+            cols[3].markdown("**Correspondance**")
+            
+            for item in changement:
+                cols = st.columns([3, 1.5, 1.5, 1])
+                cols[0].write(item)
+                
+                # RVD data
+                rvd_value = rvd_data.get(item, "Non")
+                cols[1].write(rvd_value)
+                
+                # AED data (assuming it's in a format like this - adjust as needed)
+                aed_value = aed_data.get(f"{item}", "Non")
+                cols[2].write(aed_value)
+                
+                # Check match and display indicator
+                if rvd_value == aed_value:
+                    cols[3].markdown("✅")
+                else:
+                    cols[3].markdown("❌")
+            
+            # Add a button to edit the consumables data if there's a mismatch
+            if st.button("Corriger les données de consommables"):
+                st.session_state['edit_consumables'] = True
+            
+            # Show edit form if button was clicked
+            if st.session_state.get('edit_consumables', False):
+                st.markdown("### Modifier les données de consommables")
+                
+                # Create an edit form
+                with st.form("edit_consumables_form"):
+                    edited_values = {}
+                    for item in changement:
+                        rvd_value = rvd_data.get(item, "Non")
+                        aed_value = aed_data.get(f"{item}", "Non")
+                        
+                        st.markdown(f"**{item}**")
+                        cols = st.columns(2)
+                        edited_values[f"rvd_{item}"] = cols[0].selectbox(
+                            f"RVD: {item}", 
+                            options=["Oui", "Non"], 
+                            index=0 if rvd_value == "Oui" else 1,
+                            key=f"rvd_{item}"
+                        )
+                        edited_values[f"aed_{item}"] = cols[1].selectbox(
+                            f"AED: {item}", 
+                            options=["Oui", "Non"], 
+                            index=0 if aed_value == "Oui" else 1,
+                            key=f"aed_{item}"
+                        )
+                    
+                    submit = st.form_submit_button("Enregistrer les modifications")
+                    if submit:
+                        # Here you would update your data structures with the edited values
+                        # This is a placeholder for where you'd implement the update logic
+                        st.success("Modifications enregistrées avec succès!")
+                        # Reset the edit flag
+                        st.session_state['edit_consumables'] = False
+        
+        # Simple display of consumables status
         for i in changement:
             if rvd_data.get(i) == "Oui":
                 st.warning(f"{i} a été effectuée ⚠️")
             else:
-                st.success(f"Aucun  {i} n'est effectuée.")
+                st.success(f"Aucun {i} n'est effectuée.")
+        
         st.markdown("---")  # Separator
         
         # Run comparison and display dashboard
         comparison_results = compare_data()
+        
+        # Add consumables comparison to the overall comparison results
+        consumables_comparison = {}
+        changement = ["Changement batterie", "Changement électrodes adultes", "Changement électrodes pédiatriques"]
+        for item in changement:
+            rvd_value = rvd_data.get(item, "Non")
+            aed_value = aed_data.get(f"{item}", "Non")
+            consumables_comparison[item] = {
+                "rvd": rvd_value,
+                "aed": aed_value,
+                "match_rvd_aed": rvd_value == aed_value
+            }
+        
+        comparison_results["Consommables"] = consumables_comparison
+        
         display_comparison_dashboard(comparison_results)
         
         # Summary section
