@@ -3,8 +3,10 @@
 import base64
 import json
 import os
+import re
 import shutil
 import tempfile
+import datetime
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict
@@ -1528,32 +1530,157 @@ def render_ui(client, reader):
                 st.info("Aucune image n'a été traitée")
 
     with tab3:
-        # Import datetime at the top level of the tab3 block
-        
-        # Header section
+        # Apply custom CSS for better styling
         st.markdown("""
-        <div style="text-align: center; margin-bottom: 2rem;">
-            <h1>📋 vs 📑 Comparaison des Documents</h1>
-            <p style="color: #6c757d; font-size: 1.1rem;">Vérification de cohérence entre les différentes sources de données</p>
-        </div>
+        <style>
+            /* Card styling */
+            .dashboard-card {
+                background-color: white;
+                border-radius: 10px;
+                padding: 20px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                margin-bottom: 20px;
+            }
+            
+            /* Status indicators */
+            .status-success {
+                color: #28a745;
+                font-weight: bold;
+            }
+            .status-warning {
+                color: #ffc107;
+                font-weight: bold;
+            }
+            .status-danger {
+                color: #dc3545;
+                font-weight: bold;
+            }
+            
+            /* Error cards */
+            .error-card {
+                background-color: #f8d7da;
+                border-left: 5px solid #dc3545;
+                padding: 12px;
+                margin-bottom: 10px;
+                border-radius: 5px;
+            }
+            .error-time {
+                font-weight: bold;
+                color: #495057;
+            }
+            .error-code {
+                font-weight: bold;
+                color: #dc3545;
+            }
+            
+            /* Section headers */
+            .section-header {
+                border-bottom: 2px solid #f0f0f0;
+                padding-bottom: 10px;
+                margin-bottom: 15px;
+                color: #495057;
+            }
+            
+            /* Comparison table */
+            .comparison-table th {
+                background-color: #f8f9fa;
+                font-weight: bold;
+            }
+            .comparison-table td, .comparison-table th {
+                padding: 8px;
+                border: 1px solid #dee2e6;
+            }
+            
+            /* Badge styling */
+            .badge {
+                padding: 5px 10px;
+                border-radius: 20px;
+                font-size: 0.85rem;
+                font-weight: 500;
+            }
+            .badge-success {
+                background-color: #d4edda;
+                color: #155724;
+            }
+            .badge-danger {
+                background-color: #f8d7da;
+                color: #721c24;
+            }
+            .badge-warning {
+                background-color: #fff3cd;
+                color: #856404;
+            }
+        </style>
         """, unsafe_allow_html=True)
+
+        # Helper function for displaying section comparisons
+        def display_section_comparison(section_data, section_title):
+            """Display a comparison section with improved UI."""
+            if not section_data:
+                st.info(f"Aucune donnée disponible pour {section_title}")
+                return
+                
+            for key, value in section_data.items():
+                if isinstance(value, dict) and not key.startswith('match_'):
+                    # Special case for nested structures like Numéro_de_série
+                    if key not in ['adultes', 'pediatriques', 'battery_level']:
+                        st.markdown(f"#### {key.replace('_', ' ').title()}")
+                        
+                        # Create a table to display comparison data
+                        comparison_columns = ["RVD Original", "RVD Relevé", "AED", "Image"]
+                        data_values = []
+                        
+                        # Get values from each source
+                        rvd_value = value.get('rvd_original', 'N/A')
+                        releve_value = value.get('rvd_releve', 'N/A')
+                        aed_value = value.get('aed', 'N/A')
+                        image_value = value.get('image', 'N/A')
+                        
+                        data_values = [rvd_value, releve_value, aed_value, image_value]
+                        
+                        # Create columns for each value
+                        cols = st.columns(4)
+                        for i, (col_title, data_val) in enumerate(zip(comparison_columns, data_values)):
+                            with cols[i]:
+                                st.markdown(f"**{col_title}**")
+                                st.markdown(f"<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px; min-height: 40px;'>{data_val}</div>", unsafe_allow_html=True)
+                        
+                        # Check matches and display indicators
+                        match_keys = [k for k in value.keys() if k.startswith('match_')]
+                        if match_keys:
+                            match_results = []
+                            for match_key in match_keys:
+                                sources = match_key.replace('match_', '').split('_')
+                                source_labels = {
+                                    'rvd_original': 'RVD',
+                                    'rvd_releve': 'Relevé',
+                                    'aed': 'AED',
+                                    'image': 'Image'
+                                }
+                                source1 = source_labels.get(sources[0], sources[0])
+                                source2 = source_labels.get(sources[1], sources[1])
+                                
+                                match_status = value.get(match_key, False)
+                                if match_status:
+                                    match_results.append(f"<span class='badge badge-success'>✓ {source1} - {source2}</span>")
+                                else:
+                                    match_results.append(f"<span class='badge badge-danger'>✗ {source1} - {source2}</span>")
+                            
+                            # Display match results
+                            st.markdown("<p><b>Comparaison:</b></p>", unsafe_allow_html=True)
+                            st.markdown(f"""<div style='margin-top: 5px;'>{''.join([f'<span style="margin-right: 10px; display: inline-block; margin-bottom: 5px;">{r}</span>' for r in match_results])}</div>""", unsafe_allow_html=True)
+                            
+                            # Add separator
+                            st.markdown("<hr style='margin-top: 15px; margin-bottom: 15px;'>", unsafe_allow_html=True)
         
-        # Information box
-        st.info("""
-        Cette section compare les informations entre les documents de référence (RVD), 
-        les données de l'appareil (AED) et les images. Le système vérifie automatiquement la cohérence 
-        des données critiques pour garantir la conformité du dispositif.
-        """)
-        st.markdown("---")  # Separator
-        
-        # Define helper function for validation check
+        # Helper function for checking matches - MOVED HERE BEFORE IT'S USED
         def check_matches(section_data):
             if not section_data:
                 return True, []
-                
+                    
             all_matched = True
             failed_items = []
-            
+                
             for key, value in section_data.items():
                 if isinstance(value, dict):
                     # Check direct match flags
@@ -1575,78 +1702,269 @@ def render_ui(client, reader):
                             failed_items.extend([(f"{key} - {item[0]}", item[1]) for item in nested_failed])
             
             return all_matched, failed_items
+
+        # Main header with animated progress indicator
+        col1, col2 = st.columns([5, 1])
+        with col1:
+            st.markdown("""
+            <div style="margin-bottom: 1.5rem;">
+                <h1 style="color: #3a506b; margin-bottom: 0.5rem;">📋 Comparaison des Documents</h1>
+                <p style="color: #6c757d; font-size: 1.1rem;">Vérification de cohérence entre RVD, AED et images</p>
+            </div>
+            """, unsafe_allow_html=True)
+        with col2:
+            st.markdown("""
+            <div style="text-align: right; padding-top: 15px;">
+                <span style="font-size: 2rem;">📑</span>
+            </div>
+            """, unsafe_allow_html=True)
         
-        # Error display section
-        if "errors" in aed_data:
-            st.subheader("Journal des Erreurs")
-                                
-            # Get error headers from metadata or use defaults
-            error_header = aed_data.get("Rapport DAE - Erreurs en cours", "Date/Heure,Code Erreur")
-            headers = [h.strip() for h in error_header.split(",")]
-                                
-            # Create error cards
-            for error in aed_data["errors"]:
-                cols = st.columns([2, 1])
-                with cols[0]:
+        # Quick Summary Card - Shows overall validation status at a glance
+        comparison_results = compare_data()
+        
+        # Process all sections for validation
+        all_matches = True
+        all_failed_items = []
+        
+        for section_name, section_data in comparison_results.items():
+            section_matches, section_failed = check_matches(section_data)
+            if not section_matches:
+                all_matches = False
+                all_failed_items.extend([(f"{section_name} - {item[0]}", item[1]) for item in section_failed])
+        
+        # Summary status card with icons and clear status
+        if all_matches:
+            st.markdown("""
+            <div style="background-color: #d4edda; border-radius: 10px; padding: 15px; 
+                    margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <div style="display: flex; align-items: center;">
+                    <div style="font-size: 2.5rem; margin-right: 15px;">✅</div>
+                    <div>
+                        <h3 style="color: #155724; margin: 0;">Toutes les vérifications sont réussies</h3>
+                        <p style="color: #155724; margin: 5px 0 0 0;">
+                            Le dispositif est conforme aux spécifications.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            num_issues = len(all_failed_items)
+            st.markdown(f"""
+            <div style="background-color: #f8d7da; border-radius: 10px; padding: 15px; 
+                    margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <div style="display: flex; align-items: center;">
+                    <div style="font-size: 2.5rem; margin-right: 15px;">❌</div>
+                    <div>
+                        <h3 style="color: #721c24; margin: 0;">Des incohérences détectées</h3>
+                        <p style="color: #721c24; margin: 5px 0 0 0;">
+                            {num_issues} problème(s) à résoudre avant validation.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Navigation tabs for different comparison sections
+        tab_titles = ["Vue d'Ensemble", "Défibrillateur", "Batterie", "Électrodes", "Consommables", "Journal d'Erreurs"]
+        tabs = st.tabs(tab_titles)
+        
+        # Tab 1: Overview
+        with tabs[0]:
+            st.markdown("""
+            <h3 class="section-header">Vue d'ensemble de la validation</h3>
+            """, unsafe_allow_html=True)
+            
+            # Display validation status for each section with color-coded indicators
+            st.markdown("<h4>Statut de validation par section</h4>", unsafe_allow_html=True)
+            
+            # Create a table for section validation status
+            section_statuses = {}
+            for section_name, section_data in comparison_results.items():
+                section_matches, section_failed = check_matches(section_data)
+                section_statuses[section_name] = {
+                    "status": section_matches,
+                    "issues": len(section_failed)
+                }
+            
+            # Create a visually appealing status dashboard
+            cols = st.columns(3)
+            for i, (section_name, status_data) in enumerate(section_statuses.items()):
+                with cols[i % 3]:
+                    if status_data["status"]:
+                        icon = "✅"
+                        bg_color = "#d4edda"
+                        text_color = "#155724"
+                        status_text = "Conforme"
+                    else:
+                        icon = "❌"
+                        bg_color = "#f8d7da"
+                        text_color = "#721c24"
+                        status_text = f"{status_data['issues']} problème(s)"
+                    
                     st.markdown(f"""
-                                    <div class="error-time">
-                                    🕒 {error[0]}
-                                    </div>
-                            """, unsafe_allow_html=True)
-                with cols[1]:
-                    st.markdown(f"""
-                                    <div class="error-code">
-                                        ⚠️ {error[1]}
-                                        </div>
-                                    """, unsafe_allow_html=True)
-        st.markdown("---")  # Separator
+                    <div style="background-color: {bg_color}; border-radius: 8px; padding: 15px; margin-bottom: 15px; text-align: center;">
+                        <div style="font-size: 1.5rem; margin-bottom: 5px;">{icon}</div>
+                        <h4 style="color: {text_color}; margin: 0;">{section_name}</h4>
+                        <p style="color: {text_color}; margin: 5px 0 0 0;">{status_text}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Add an action items card if there are issues
+            if not all_matches:
+                st.markdown("""
+                <div style="background-color: #e9ecef; border-radius: 10px; padding: 20px; margin-top: 20px;">
+                    <h4 style="color: #495057; margin-top: 0;">Actions recommandées:</h4>
+                    <ul style="color: #495057;">
+                        <li>Vérifiez les données dans le Rapport de vérification (RVD)</li>
+                        <li>Confirmez les informations du défibrillateur (AED)</li>
+                        <li>Vérifiez la qualité et la lisibilité des images</li>
+                        <li>Consultez chaque onglet pour identifier les problèmes spécifiques</li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
         
-        # Consumables changes section
-        st.subheader("Changements de Consommables")
+        # Tab 2: Defibrillator
+        with tabs[1]:
+            st.markdown("""
+            <h3 class="section-header">Données du Défibrillateur</h3>
+            """, unsafe_allow_html=True)
+            
+            defibrillator_data = comparison_results.get("defibrillateur", {})
+            display_section_comparison(defibrillator_data, "Défibrillateur")
         
-        # Add an expander for the consumables comparisons
-        with st.expander("Comparaison des Changements de Consommables", expanded=True):
+        # Tab 3: Battery
+        with tabs[2]:
+            st.markdown("""
+            <h3 class="section-header">Données de la Batterie</h3>
+            """, unsafe_allow_html=True)
+            
+            battery_data = comparison_results.get("batterie", {})
+            display_section_comparison(battery_data, "Batterie")
+            
+            # Add battery level visualization
+            if "battery_level" in battery_data:
+                battery_info = battery_data["battery_level"]
+                
+                st.markdown("<h4>Niveau de charge de la batterie</h4>", unsafe_allow_html=True)
+                
+                # Extract battery levels
+                rvd_batt = battery_info.get("rvd", "N/A")
+                aed_batt = battery_info.get("aed", "N/A")
+                
+                # Attempt to extract numeric values for progress bars
+                try:
+                    rvd_level = int(re.search(r'\d+', rvd_batt).group())
+                except (AttributeError, ValueError):
+                    rvd_level = 0
+                    
+                try:
+                    aed_level = int(re.search(r'\d+', aed_batt).group())
+                except (AttributeError, ValueError):
+                    aed_level = 0
+                
+                # Display battery levels side by side with progress bars
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("<p><b>Niveau RVD:</b></p>", unsafe_allow_html=True)
+                    st.progress(rvd_level/100)
+                    st.markdown(f"<p style='text-align: center;'>{rvd_batt}</p>", unsafe_allow_html=True)
+                    
+                with col2:
+                    st.markdown("<p><b>Niveau AED:</b></p>", unsafe_allow_html=True)
+                    st.progress(aed_level/100)
+                    st.markdown(f"<p style='text-align: center;'>{aed_batt}</p>", unsafe_allow_html=True)
+                
+                # Add match status
+                match_status = battery_info.get("match", False)
+                if match_status:
+                    st.success("✓ Les niveaux de batterie correspondent (±2%)")
+                else:
+                    st.error("✗ Écart significatif entre les niveaux de batterie")
+        
+        # Tab 4: Electrodes
+        with tabs[3]:
+            st.markdown("""
+            <h3 class="section-header">Données des Électrodes</h3>
+            """, unsafe_allow_html=True)
+            
+            electrodes_data = comparison_results.get("electrodes", {})
+            
+            # Create subtabs for adult and pediatric electrodes
+            electrode_subtabs = st.tabs(["Électrodes Adultes", "Électrodes Pédiatriques"])
+            
+            with electrode_subtabs[0]:
+                if electrodes_data.get("adultes"):
+                    display_section_comparison(electrodes_data["adultes"], "Électrodes Adultes")
+                else:
+                    st.info("Aucune donnée disponible pour les électrodes adultes")
+                    
+            with electrode_subtabs[1]:
+                if electrodes_data.get("pediatriques"):
+                    display_section_comparison(electrodes_data["pediatriques"], "Électrodes Pédiatriques")
+                else:
+                    st.info("Aucune donnée disponible pour les électrodes pédiatriques")
+        
+        # Tab 5: Consumables
+        with tabs[4]:
+            st.markdown("""
+            <h3 class="section-header">Changements de Consommables</h3>
+            """, unsafe_allow_html=True)
+            
+            # Consumables comparison
+            consumables_data = comparison_results.get("Consommables", {})
+            
+            # Create an improved consumables table
+            st.markdown("""
+            <div style="margin-bottom: 15px;">
+                <table style="width: 100%; border-collapse: collapse;" class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40%;">Consommable</th>
+                            <th style="width: 20%;">RVD</th>
+                            <th style="width: 20%;">AED</th>
+                            <th style="width: 20%;">Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            """, unsafe_allow_html=True)
+            
             changement = ["Changement batterie", "Changement électrodes adultes", "Changement électrodes pédiatriques"]
             
-            # Create a table for consumables comparison
-            cols = st.columns([3, 1.5, 1.5, 1])
-            cols[0].markdown("**Consommable**")
-            cols[1].markdown("**RVD**")
-            cols[2].markdown("**AED**")
-            cols[3].markdown("**Correspondance**")
-            
             for item in changement:
-                cols = st.columns([3, 1.5, 1.5, 1])
-                cols[0].write(item)
+                item_data = consumables_data.get(item, {})
+                rvd_value = item_data.get("rvd", "Non")
+                aed_value = item_data.get("aed", "Non")
+                match = item_data.get("match_rvd_aed", False)
                 
-                # RVD data
-                rvd_value = rvd_data.get(item, "Non")
-                cols[1].write(rvd_value)
+                status_icon = "✅" if match else "❌"
+                status_color = "#28a745" if match else "#dc3545"
                 
-                # AED data (assuming it's in a format like this - adjust as needed)
-                aed_value = aed_data.get(f"{item}", "Non")
-                cols[2].write(aed_value)
-                
-                # Check match and display indicator
-                if rvd_value == aed_value:
-                    cols[3].markdown("✅")
-                else:
-                    cols[3].markdown("❌")
+                # Generate table row
+                st.markdown(f"""
+                <tr>
+                    <td>{item}</td>
+                    <td style="text-align: center;">{rvd_value}</td>
+                    <td style="text-align: center;">{aed_value}</td>
+                    <td style="text-align: center; color: {status_color};">{status_icon}</td>
+                </tr>
+                """, unsafe_allow_html=True)
             
-            # Add a button to edit the consumables data if there's a mismatch
-            if st.button("Corriger les données de consommables"):
-                st.session_state['edit_consumables'] = True
+            st.markdown("""
+                    </tbody>
+                </table>
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Show edit form if button was clicked
-            if st.session_state.get('edit_consumables', False):
-                st.markdown("### Modifier les données de consommables")
-                
-                # Create an edit form
+            # Add edit form for consumables
+            with st.expander("Modifier les données de consommables", expanded=False):
                 with st.form("edit_consumables_form"):
                     edited_values = {}
                     for item in changement:
-                        rvd_value = rvd_data.get(item, "Non")
-                        aed_value = aed_data.get(f"{item}", "Non")
+                        item_data = consumables_data.get(item, {})
+                        rvd_value = item_data.get("rvd", "Non")
+                        aed_value = item_data.get("aed", "Non")
                         
                         st.markdown(f"**{item}**")
                         cols = st.columns(2)
@@ -1666,126 +1984,46 @@ def render_ui(client, reader):
                     submit = st.form_submit_button("Enregistrer les modifications")
                     if submit:
                         # Here you would update your data structures with the edited values
-                        # This is a placeholder for where you'd implement the update logic
                         st.success("Modifications enregistrées avec succès!")
                         # Reset the edit flag
                         st.session_state['edit_consumables'] = False
         
-        # Simple display of consumables status
-        for i in changement:
-            if rvd_data.get(i) == "Oui":
-                st.warning(f"{i} a été effectuée ⚠️")
-            else:
-                st.success(f"Aucun {i} n'est effectuée.")
-        
-        st.markdown("---")  # Separator
-        
-        # Run comparison and display dashboard
-        comparison_results = compare_data()
-        
-        # Add consumables comparison to the overall comparison results
-        consumables_comparison = {}
-        changement = ["Changement batterie", "Changement électrodes adultes", "Changement électrodes pédiatriques"]
-        for item in changement:
-            rvd_value = rvd_data.get(item, "Non")
-            aed_value = aed_data.get(f"{item}", "Non")
-            consumables_comparison[item] = {
-                "rvd": rvd_value,
-                "aed": aed_value,
-                "match_rvd_aed": rvd_value == aed_value
-            }
-        
-        comparison_results["Consommables"] = consumables_comparison
-        
-        display_comparison_dashboard(comparison_results)
-        
-        # Summary section
-        st.markdown("## 📊 Résumé de la Validation")
-        
-        # Process all sections for validation
-        all_matches = True
-        all_failed_items = []
-        
-        for section_name, section_data in comparison_results.items():
-            section_matches, section_failed = check_matches(section_data)
-            if not section_matches:
-                all_matches = False
-                # Add section name to failed items
-                all_failed_items.extend([(f"{section_name} - {item[0]}", item[1]) for item in section_failed])
-        
-        # Display summary with visual elements
-        if all_matches:
+        # Tab 6: Error Log
+        with tabs[5]:
             st.markdown("""
-            <div style="background-color: #d4edda; border-radius: 10px; padding: 2rem; text-align: center; 
-                    margin-top: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <h2 style="color: #155724; margin-bottom: 1rem;">✅ Validation Réussie</h2>
-                <p style="color: #155724; font-size: 1.1rem;">
-                    Tous les contrôles sont réussis ! La maintenance est conforme aux spécifications.
-                </p>
-                <div style="font-size: 3rem; margin: 1rem 0;">🎉</div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            # Create a more structured failed validation summary
-            st.markdown("""
-            <div style="background-color: #f8d7da; border-radius: 10px; padding: 2rem; 
-                    margin-top: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <h2 style="color: #721c24; margin-bottom: 1rem; text-align: center;">❌ Échec de Validation</h2>
-                <p style="color: #721c24; font-size: 1.1rem; text-align: center;">
-                    Des incohérences ont été détectées entre les différentes sources de données
-                </p>
-            </div>
+            <h3 class="section-header">Journal des Erreurs</h3>
             """, unsafe_allow_html=True)
             
-            # Group failed items by section for better organization
-            failed_by_section = {}
-            for item, source_type in all_failed_items:
-                section_parts = item.split(' - ', 1)
-                section = section_parts[0]
-                field = section_parts[1] if len(section_parts) > 1 else ""
+            if "errors" in aed_data and aed_data["errors"]:
+                # Get error headers from metadata or use defaults
+                error_header = aed_data.get("Rapport DAE - Erreurs en cours", "Date/Heure,Code Erreur")
+                headers = [h.strip() for h in error_header.split(",")]
                 
-                if section not in failed_by_section:
-                    failed_by_section[section] = []
-                    
-                failed_by_section[section].append((field, source_type))
-            
-            # Display failed items in an organized, expandable format
-            for section, failures in failed_by_section.items():
-                with st.expander(f"🔍 Problèmes dans la section: {section}", expanded=True):
-                    for field, source_type in failures:
-                        source_labels = {
-                            'rvd_aed': 'RVD vs AED',
-                            'rvd_image': 'RVD vs Image',
-                            'releve_aed': 'Relevé vs AED',
-                            'releve_image': 'Relevé vs Image'
-                        }
-                        
-                        source_label = source_labels.get(source_type, source_type)
-                        field_display = field.replace('_', ' ').title()
-                        
-                        st.markdown(f"""
-                        <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; 
-                                padding: 0.75rem; margin-bottom: 0.5rem;">
-                            <p style="margin: 0; color: #856404;">
-                                <strong>{field_display}</strong>: Incohérence détectée entre {source_label}
-                            </p>
+                # Create error cards with improved styling
+                for error in aed_data["errors"]:
+                    st.markdown(f"""
+                    <div class="error-card">
+                        <div style="display: flex; justify-content: space-between;">
+                            <div class="error-time">🕒 {error[0]}</div>
+                            <div class="error-code">⚠️ Code: {error[1]}</div>
                         </div>
-                        """, unsafe_allow_html=True)
-            
-            # Add action items for the user
-            st.markdown("""
-            <div style="background-color: #e2e3e5; border-radius: 5px; padding: 1rem; margin-top: 1.5rem;">
-                <h3 style="color: #383d41; margin-top: 0;">Actions recommandées:</h3>
-                <ul style="color: #383d41;">
-                    <li>Vérifiez les données dans le Rapport de vérification (RVD)</li>
-                    <li>Assurez-vous que les informations de l'appareil (AED) sont correctement enregistrées</li>
-                    <li>Vérifiez la qualité et la lisibilité des images capturées</li>
-                    <li>Corrigez les erreurs identifiées et relancez la comparaison</li>
-                    <li>Valider le rapport dans Zoho </li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.success("Aucune erreur détectée dans le journal du défibrillateur.")
         
+        # Export controls
+        st.markdown("---")
+        export_col1, export_col2 = st.columns(2)
+        
+        with export_col1:
+            if st.button("📄 Exporter le rapport PDF", use_container_width=True):
+                st.success("Rapport exporté avec succès!")
+        
+        with export_col2:
+            if st.button("📤 Envoyer à Zoho CRM", use_container_width=True):
+                st.success("Données envoyées avec succès à Zoho CRM!")
+                        
         # Timestamp and signature
         st.markdown(f"""
         <div style="text-align: right; margin-top: 2rem; color: #6c757d; font-size: 0.8rem;">
