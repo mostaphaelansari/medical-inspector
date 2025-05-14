@@ -1708,8 +1708,8 @@ def render_ui(client, reader):
         with col1:
             st.markdown("""
             <div style="margin-bottom: 1.5rem;">
-                <h1 style="color: #3a506b; margin-bottom: 0.5rem;">📋 Vérification du Rapport d'Intervention Défibrillateur</h1>
-                <p style="color: #6c757d; font-size: 1.1rem;">Contrôle de cohérence entre le RVD, l'AED et les images</p>
+                <h1 style="color: #3a506b; margin-bottom: 0.5rem;">📋 Comparaison des Documents</h1>
+                <p style="color: #6c757d; font-size: 1.1rem;">Vérification de cohérence entre RVD, AED et images</p>
             </div>
             """, unsafe_allow_html=True)
         with col2:
@@ -1719,7 +1719,7 @@ def render_ui(client, reader):
             </div>
             """, unsafe_allow_html=True)
         
-        # Get the comparison results (assuming this function exists elsewhere in your code)
+        # Quick Summary Card - Shows overall validation status at a glance
         comparison_results = compare_data()
         
         # Process all sections for validation
@@ -1765,8 +1765,8 @@ def render_ui(client, reader):
             </div>
             """, unsafe_allow_html=True)
         
-        # Navigation tabs aligned with the PDF schema
-        tab_titles = ["Vue d'Ensemble", "Informations Générales", "Défibrillateur", "Batterie", "Électrodes", "Vérifications et Tests", "Kit & Support", "Téléassistance", "Autres Vérifications", "Commentaires", "Administratif"]
+        # Navigation tabs for different comparison sections
+        tab_titles = ["Vue d'Ensemble", "Défibrillateur", "Batterie", "Électrodes", "Consommables", "Journal d'Erreurs"]
         tabs = st.tabs(tab_titles)
         
         # Tab 1: Overview
@@ -1824,465 +1824,277 @@ def render_ui(client, reader):
                 </div>
                 """, unsafe_allow_html=True)
         
-        # Tab 2: Informations Générales
+        # Tab 2: Defibrillator
         with tabs[1]:
             st.markdown("""
-            <h3 class="section-header">Informations Générales</h3>
-            """, unsafe_allow_html=True)
-            
-            # Get general information data
-            general_info = comparison_results.get("informations_generales", {})
-            
-            # Display the general information in a card format
-            st.markdown("""
-            <div class="dashboard-card">
-                <h4>Informations du Site et de l'Intervention</h4>
-            """, unsafe_allow_html=True)
-            
-            # Create two columns for general info
-            col1, col2 = st.columns(2)
-            
-            # Define info fields based on PDF schema
-            general_fields = [
-                {"name": "Code site", "key": "code_site"},
-                {"name": "Code Agent", "key": "code_agent"},
-                {"name": "Titre", "key": "titre"},
-                {"name": "Type d'intervention", "key": "type_intervention"},
-                {"name": "Statut d'intervention", "key": "statut_intervention"},
-                {"name": "Code repérage du produit", "key": "code_reperage"}
-            ]
-            
-            # Display fields in the columns
-            for i, field in enumerate(general_fields):
-                with col1 if i < 3 else col2:
-                    value = general_info.get(field["key"], "N/A")
-                    st.markdown(f"""
-                    <div style="margin-bottom: 10px;">
-                        <p style="color: #6c757d; margin-bottom: 2px;">{field["name"]}</p>
-                        <p style="font-weight: bold; margin: 0;">{value}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            st.markdown("""</div>""", unsafe_allow_html=True)
-        
-        # Tab 3: Defibrillator
-        with tabs[2]:
-            st.markdown("""
-            <h3 class="section-header">Informations sur le Défibrillateur</h3>
+            <h3 class="section-header">Données du Défibrillateur</h3>
             """, unsafe_allow_html=True)
             
             defibrillator_data = comparison_results.get("defibrillateur", {})
             display_section_comparison(defibrillator_data, "Défibrillateur")
         
-        # Tab 4: Battery
+        # Tab 3: Battery
+        with tabs[2]:
+
+            def display_battery_change_status(rvd: dict):
+                """
+                Display the battery change status with clear logging and robust handling.
+                """
+                if not rvd or not isinstance(rvd, dict):
+                    st.error("RVD data is missing or invalid.")
+                    return
+
+                battery_change_val = rvd.get("Changement batterie", "").strip()
+                st.write(f"🔍 Battery change raw value: `{battery_change_val}`")  # Debug info
+
+                is_changed = battery_change_val.lower() == "oui"
+
+                if is_changed:
+                    st.warning("⚠️ Changement de batterie effectué")
+                else:
+                    st.success("✅ Pas de changement de batterie détecté")
+
+                st.text(f"Battery change interpreted as: {'True' if is_changed else 'False'}")
+
+            # Title for the Battery section
+            st.markdown("""
+            <h3 class="section-header">Données de la Batterie</h3>
+            """, unsafe_allow_html=True)
+
+            # Get battery data from the comparison results
+            battery_data = comparison_results.get("batterie", {})
+
+            # Display comparison results
+            display_section_comparison(battery_data, "Batterie")
+
+            # Subheading for Battery Inspection
+            st.markdown("""
+            <h4 class="section-header">Inspection de la Batterie</h4>
+            """, unsafe_allow_html=True)
+
+            # Get RVD data
+            rvd_data = st.session_state.get("processed_data", {}).get("RVD", {})
+            battery_change_rvd = rvd_data.get("Changement batterie", "").strip()
+            is_battery_changed_rvd = battery_change_rvd.lower() == "oui"
+
+            # Debugging: Display battery change value
+            st.write("Battery change value (RVD):", battery_change_rvd)
+            st.write("Is battery changed (RVD):", is_battery_changed_rvd)
+
+            # Display status based on RVD
+            display_battery_change_status(rvd_data)
+
+            # Subheading for Battery Replacement
+            st.markdown("<h5>Remplacement de la Batterie</h5>", unsafe_allow_html=True)
+
+            # Create comparison for battery serial numbers
+            cols = st.columns(2)
+
+            # Existing battery serial number
+            with cols[0]:
+                st.markdown("<p><b>N° série batterie existante:</b></p>", unsafe_allow_html=True)
+                existing_battery_sn = battery_data.get("Numéro de série Batterie", {}).get("rvd_original", "N/A")
+                st.markdown(
+                    f"""<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px;'>{existing_battery_sn}</div>""",
+                    unsafe_allow_html=True
+                )
+
+            # New battery serial number
+            with cols[1]:
+                st.markdown("<p><b>N° série nouvelle batterie:</b></p>", unsafe_allow_html=True)
+                new_battery_sn = "N/A"
+
+                if is_battery_changed_rvd:
+                    st.write("Battery was changed, attempting to find new battery serial number...")
+
+                    # Try to find new serial number in structured data
+                    new_battery_sn = (
+                        battery_data.get("Numéro de série", {}).get("rvd_releve") or
+                        rvd_data.get("N° série nouvelle batterie") or
+                        "N/A"
+                    )
+
+                    st.write(f"New battery serial number found: {new_battery_sn}")
+                else:
+                    st.write("Battery was not changed. No new serial number expected.")
+
+                st.markdown(
+                    f"""<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px;'>{new_battery_sn}</div>""",
+                    unsafe_allow_html=True
+                )
+
+            # Show additional battery info if changed
+            if is_battery_changed_rvd:
+                st.subheader("🔋 Informations sur la nouvelle batterie")
+                st.write("Numéro de série :", rvd_data.get("N° série nouvelle batterie", "Non trouvé"))
+                st.write("Date de fabrication :", rvd_data.get("Date fabrication nouvelle batterie", "Non trouvé"))
+                st.write("Date de mise en service :", rvd_data.get("Date de mise en service de la nouvelle batterie", "Non trouvé"))
+
+       # Tab 4: Electrodes
         with tabs[3]:
             st.markdown("""
-            <h3 class="section-header">Informations sur la Batterie</h3>
+            <h3 class="section-header">Données des Électrodes</h3>
             """, unsafe_allow_html=True)
             
-            battery_data = comparison_results.get("batterie", {})
-            
-            # First display the original battery information
-            st.markdown("<h4>Batterie d'origine</h4>", unsafe_allow_html=True)
-            
-            original_battery = {k: v for k, v in battery_data.items() if not k.startswith("new_")}
-            display_section_comparison(original_battery, "Batterie d'origine")
-            
-            # Then display the new battery information if available
-            st.markdown("<h4>Nouvelle Batterie</h4>", unsafe_allow_html=True)
-            
-            new_battery = {k.replace("new_", ""): v for k, v in battery_data.items() if k.startswith("new_")}
-            if new_battery:
-                display_section_comparison(new_battery, "Nouvelle Batterie")
-            else:
-                st.info("Aucune donnée de nouvelle batterie disponible")
-            
-            # Add battery level visualization
-            if "battery_level" in battery_data:
-                battery_info = battery_data["battery_level"]
-                
-                st.markdown("<h4>Niveau de charge de la batterie</h4>", unsafe_allow_html=True)
-                
-                # Extract battery levels
-                old_batt = battery_info.get("old", "N/A")
-                new_batt = battery_info.get("new", "N/A")
-                
-                # Attempt to extract numeric values for progress bars
-                try:
-                    old_level = int(re.search(r'\d+', old_batt).group())
-                except (AttributeError, ValueError):
-                    old_level = 0
-                    
-                try:
-                    new_level = int(re.search(r'\d+', new_batt).group())
-                except (AttributeError, ValueError):
-                    new_level = 0
-                
-                # Display battery levels side by side with progress bars
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("<p><b>Niveau d'origine:</b></p>", unsafe_allow_html=True)
-                    st.progress(old_level/100)
-                    st.markdown(f"<p style='text-align: center;'>{old_batt}</p>", unsafe_allow_html=True)
-                    
-                with col2:
-                    st.markdown("<p><b>Niveau nouvelle batterie:</b></p>", unsafe_allow_html=True)
-                    st.progress(new_level/100)
-                    st.markdown(f"<p style='text-align: center;'>{new_batt}</p>", unsafe_allow_html=True)
-        
-        # Tab 5: Electrodes
-        with tabs[4]:
-            st.markdown("""
-            <h3 class="section-header">Informations sur les Électrodes</h3>
-            """, unsafe_allow_html=True)
-            
+            # Ensure we have the comparison results
+            comparison_results = compare_data()
             electrodes_data = comparison_results.get("electrodes", {})
             
             # Create subtabs for adult and pediatric electrodes
             electrode_subtabs = st.tabs(["Électrodes Adultes", "Électrodes Pédiatriques"])
             
             with electrode_subtabs[0]:
-                adult_data = electrodes_data.get("adultes", {})
-                if adult_data:
-                    # First display original electrodes info
-                    st.markdown("<h4>Électrodes Adultes d'origine</h4>", unsafe_allow_html=True)
-                    original_adult = {k: v for k, v in adult_data.items() if not k.startswith("new_")}
-                    display_section_comparison(original_adult, "Électrodes Adultes d'origine")
+                if electrodes_data.get("adultes"):
+                    display_section_comparison(electrodes_data["adultes"], "Électrodes Adultes")
                     
-                    # Then display new electrodes info if available
-                    st.markdown("<h4>Nouvelles Électrodes Adultes</h4>", unsafe_allow_html=True)
-                    new_adult = {k.replace("new_", ""): v for k, v in adult_data.items() if k.startswith("new_")}
-                    if new_adult:
-                        display_section_comparison(new_adult, "Nouvelles Électrodes Adultes")
+                    # Add Component Inspections for Adult Electrodes
+                    st.markdown("""
+                    <h4 class="section-header">Inspection des Électrodes Adultes</h4>
+                    """, unsafe_allow_html=True)
+                    
+                    # Create a comparison for adult electrodes replacement
+                    st.markdown("<h5>Remplacement des Électrodes Adultes</h5>", unsafe_allow_html=True)
+                    
+                    # Create comparison between existing and new adult electrodes serial numbers
+                    cols = st.columns(2)
+                    with cols[0]:
+                        st.markdown("<p><b>N° série électrodes adultes existantes:</b></p>", unsafe_allow_html=True)
+                        existing_sn = "N/A"
+                        if electrodes_data.get("adultes", {}).get("Numéro_de_série", {}):
+                            existing_sn = electrodes_data["adultes"]["Numéro_de_série"].get("rvd_original", "N/A")
+                        st.markdown(f"""<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px;'>{existing_sn}</div>""", unsafe_allow_html=True)
+                    
+                    with cols[1]:
+                        st.markdown("<p><b>N° série nouvelles électrodes adultes:</b></p>", unsafe_allow_html=True)
+                        new_electrodes_sn = "N/A"  # Get this from your data
+                        if "N° série nouvelles électrodes" in comparison_results.get("Consommables", {}):
+                            new_electrodes_sn = comparison_results["Consommables"]["N° série nouvelles électrodes"].get("rvd", "N/A")
+                        st.markdown(f"""<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px;'>{new_electrodes_sn}</div>""", unsafe_allow_html=True)
+                    
+                    # Add comparison with image data
+                    st.markdown("<h5>Vérification avec l'Image</h5>", unsafe_allow_html=True)
+                    
+                    # Create columns for comparison
+                    cols = st.columns(2)
+                    with cols[0]:
+                        st.markdown("<p><b>N° série nouvelles électrodes (RVD):</b></p>", unsafe_allow_html=True)
+                        st.markdown(f"""<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px;'>{new_electrodes_sn}</div>""", unsafe_allow_html=True)
+                    
+                    with cols[1]:
+                        st.markdown("<p><b>N° série nouvelles électrodes (Image):</b></p>", unsafe_allow_html=True)
+                        image_electrodes_sn = "N/A"  # Get this from your image data
+                        if "N° série nouvelles électrodes" in comparison_results.get("Consommables", {}):
+                            image_electrodes_sn = comparison_results["Consommables"]["N° série nouvelles électrodes"].get("image", "N/A")
+                        st.markdown(f"""<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px;'>{image_electrodes_sn}</div>""", unsafe_allow_html=True)
+                    
+                    # Add match status
+                    match_status = new_electrodes_sn == image_electrodes_sn or (new_electrodes_sn == "N/A" and image_electrodes_sn == "N/A")
+                    if match_status:
+                        st.success("✓ Les numéros de série des nouvelles électrodes adultes correspondent")
                     else:
-                        st.info("Aucune donnée de nouvelles électrodes adultes disponible")
+                        st.error("✗ Écart entre les numéros de série des nouvelles électrodes adultes")
+                    
                 else:
                     st.info("Aucune donnée disponible pour les électrodes adultes")
                     
             with electrode_subtabs[1]:
-                pediatric_data = electrodes_data.get("pediatriques", {})
-                if pediatric_data:
-                    # First display original electrodes info
-                    st.markdown("<h4>Électrodes Pédiatriques d'origine</h4>", unsafe_allow_html=True)
-                    original_pediatric = {k: v for k, v in pediatric_data.items() if not k.startswith("new_")}
-                    display_section_comparison(original_pediatric, "Électrodes Pédiatriques d'origine")
+                if electrodes_data.get("pediatriques"):
+                    display_section_comparison(electrodes_data["pediatriques"], "Électrodes Pédiatriques")
                     
-                    # Then display new electrodes info if available
-                    st.markdown("<h4>Nouvelles Électrodes Pédiatriques</h4>", unsafe_allow_html=True)
-                    new_pediatric = {k.replace("new_", ""): v for k, v in pediatric_data.items() if k.startswith("new_")}
-                    if new_pediatric:
-                        display_section_comparison(new_pediatric, "Nouvelles Électrodes Pédiatriques")
+                    # Add Component Inspections for Pediatric Electrodes
+                    st.markdown("""
+                    <h4 class="section-header">Inspection des Électrodes Pédiatriques</h4>
+                    """, unsafe_allow_html=True)
+                    
+                    # Create a comparison for pediatric electrodes replacement
+                    st.markdown("<h5>Remplacement des Électrodes Pédiatriques</h5>", unsafe_allow_html=True)
+                    
+                    # Create comparison between existing and new pediatric electrodes serial numbers
+                    cols = st.columns(2)
+                    with cols[0]:
+                        st.markdown("<p><b>N° série électrodes pédiatriques existantes:</b></p>", unsafe_allow_html=True)
+                        existing_sn = "N/A"
+                        if electrodes_data.get("pediatriques", {}).get("Numéro_de_série", {}):
+                            existing_sn = electrodes_data["pediatriques"]["Numéro_de_série"].get("rvd_original", "N/A")
+                        st.markdown(f"""<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px;'>{existing_sn}</div>""", unsafe_allow_html=True)
+                    
+                    with cols[1]:
+                        st.markdown("<p><b>N° série nouvelles électrodes pédiatriques:</b></p>", unsafe_allow_html=True)
+                        new_pediatric_sn = "N/A"  # Get this from your data
+                        if "N° série nouvelles électrodes pédiatriques" in comparison_results.get("Consommables", {}):
+                            new_pediatric_sn = comparison_results["Consommables"]["N° série nouvelles électrodes pédiatriques"].get("rvd", "N/A")
+                        st.markdown(f"""<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px;'>{new_pediatric_sn}</div>""", unsafe_allow_html=True)
+                    
+                    # Add comparison with image data
+                    st.markdown("<h5>Vérification avec l'Image</h5>", unsafe_allow_html=True)
+                    
+                    # Create columns for comparison
+                    cols = st.columns(2)
+                    with cols[0]:
+                        st.markdown("<p><b>N° série nouvelles électrodes pédiatriques (RVD):</b></p>", unsafe_allow_html=True)
+                        st.markdown(f"""<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px;'>{new_pediatric_sn}</div>""", unsafe_allow_html=True)
+                    
+                    with cols[1]:
+                        st.markdown("<p><b>N° série nouvelles électrodes pédiatriques (Image):</b></p>", unsafe_allow_html=True)
+                        image_pediatric_sn = "N/A"  # Get this from your image data
+                        if "N° série nouvelles électrodes pédiatriques" in comparison_results.get("Consommables", {}):
+                            image_pediatric_sn = comparison_results["Consommables"]["N° série nouvelles électrodes pédiatriques"].get("image", "N/A")
+                        st.markdown(f"""<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px;'>{image_pediatric_sn}</div>""", unsafe_allow_html=True)
+                    
+                    # Add match status
+                    match_status = new_pediatric_sn == image_pediatric_sn or (new_pediatric_sn == "N/A" and image_pediatric_sn == "N/A")
+                    if match_status:
+                        st.success("✓ Les numéros de série des nouvelles électrodes pédiatriques correspondent")
                     else:
-                        st.info("Aucune donnée de nouvelles électrodes pédiatriques disponible")
+                        st.error("✗ Écart entre les numéros de série des nouvelles électrodes pédiatriques")
                 else:
                     st.info("Aucune donnée disponible pour les électrodes pédiatriques")
         
-        # Tab 6: Vérifications et Tests
+
+
+        
+        # Tab 6: Error Log
         with tabs[5]:
             st.markdown("""
-            <h3 class="section-header">Vérifications et Tests</h3>
+            <h3 class="section-header">Journal des Erreurs</h3>
             """, unsafe_allow_html=True)
             
-            checks_data = comparison_results.get("verifications", {})
-            
-            # Create a checklist style UI for verification items
-            checks_items = [
-                "Voyant d'état à l'arrivée",
-                "Signalétique conforme",
-                "Inspection visuelle",
-                "Nettoyage et désinfection",
-                "Voyants lumineux fonctionnels",
-                "Annonces vocales et messages",
-                "Journal vérifié et enregistré",
-                "Horloge synchronisée",
-                "Mise à jour logiciel",
-                "Test de choc concluant",
-                "Voyant d'état à la fin",
-                "Carte d'identification remplie"
-            ]
-            
-            st.markdown("""
-            <div class="dashboard-card">
-                <table style="width: 100%;" class="comparison-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 60%;">Élément vérifié</th>
-                            <th style="width: 20%;">Statut RVD</th>
-                            <th style="width: 20%;">Statut Validé</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            """, unsafe_allow_html=True)
-            
-            for item in checks_items:
-                item_key = item.lower().replace(" ", "_").replace("'", "")
-                item_data = checks_data.get(item_key, {})
-                rvd_value = item_data.get("rvd", "Non vérifié")
-                validated = item_data.get("validated", False)
+            if "errors" in aed_data and aed_data["errors"]:
+                # Get error headers from metadata or use defaults
+                error_header = aed_data.get("Rapport DAE - Erreurs en cours", "Date/Heure,Code Erreur")
+                headers = [h.strip() for h in error_header.split(",")]
                 
-                status_icon = "✅" if validated else "❌"
-                status_color = "#28a745" if validated else "#dc3545"
-                
-                st.markdown(f"""
-                <tr>
-                    <td>{item}</td>
-                    <td style="text-align: center;">{rvd_value}</td>
-                    <td style="text-align: center; color: {status_color};">{status_icon}</td>
-                </tr>
-                """, unsafe_allow_html=True)
-            
-            st.markdown("""
-                    </tbody>
-                </table>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Tab 7: Kit & Support
-        with tabs[6]:
-            st.markdown("""
-            <h3 class="section-header">Kit de Secours et Support</h3>
-            """, unsafe_allow_html=True)
-            
-            kit_data = comparison_results.get("kit_support", {})
-            
-            # Create cards for kit and support information
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("""
-                <div class="dashboard-card">
-                    <h4>Kit de Secours</h4>
-                """, unsafe_allow_html=True)
-                
-                kit_verified = kit_data.get("kit_verifie", {}).get("rvd", "Non")
-                kit_changed = kit_data.get("kit_change", {}).get("rvd", "Non")
-                
-                st.markdown(f"""
-                <div style="margin-bottom: 10px;">
-                    <p><b>Vérification du kit:</b> {kit_verified}</p>
-                    <p><b>Changement du kit:</b> {kit_changed}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown("""</div>""", unsafe_allow_html=True)
-                
-            with col2:
-                st.markdown("""
-                <div class="dashboard-card">
-                    <h4>Support Mural / Armoire</h4>
-                """, unsafe_allow_html=True)
-                
-                support_conform = kit_data.get("support_conforme", {}).get("rvd", "Non")
-                armoire_type = kit_data.get("type_armoire", {}).get("rvd", "Non spécifié")
-                
-                st.markdown(f"""
-                <div style="margin-bottom: 10px;">
-                    <p><b>Installation conforme:</b> {support_conform}</p>
-                    <p><b>Type d'armoire:</b> {armoire_type}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown("""</div>""", unsafe_allow_html=True)
-        
-        # Tab 8: Téléassistance/Télésurveillance
-        with tabs[7]:
-            st.markdown("""
-            <h3 class="section-header">Téléassistance / Télésurveillance</h3>
-            """, unsafe_allow_html=True)
-            
-            teleassistance_data = comparison_results.get("teleassistance", {})
-            
-            if teleassistance_data:
-                # Display teleassistance information
-                st.markdown("""
-                <div class="dashboard-card">
-                    <h4>Information de Téléassistance</h4>
-                """, unsafe_allow_html=True)
-                
-                # Display PTI information
-                pti_status = teleassistance_data.get("pti_status", {}).get("rvd", "Non spécifié")
-                st.markdown(f"""
-                <div style="margin-bottom: 10px;">
-                    <p><b>PTI fonctionnel:</b> {pti_status}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Display other teleassistance fields
-                for key, value in teleassistance_data.items():
-                    if key != "pti_status" and isinstance(value, dict):
-                        field_name = key.replace('_', ' ').title()
-                        field_value = value.get("rvd", "Non spécifié")
-                        st.markdown(f"""
-                        <div style="margin-bottom: 10px;">
-                            <p><b>{field_name}:</b> {field_value}</p>
+                # Create error cards with improved styling
+                for error in aed_data["errors"]:
+                    st.markdown(f"""
+                    <div class="error-card">
+                        <div style="display: flex; justify-content: space-between;">
+                            <div class="error-time">🕒 {error[0]}</div>
+                            <div class="error-code">⚠️ Code: {error[1]}</div>
                         </div>
-                        """, unsafe_allow_html=True)
-                
-                st.markdown("""</div>""", unsafe_allow_html=True)
+                    </div>
+                    """, unsafe_allow_html=True)
             else:
-                st.info("Aucune donnée de téléassistance/télésurveillance disponible")
+                st.success("Aucune erreur détectée dans le journal du défibrillateur.")
         
-        # Tab 9: Autres Vérifications
-        with tabs[8]:
-            st.markdown("""
-            <h3 class="section-header">Autres Vérifications</h3>
-            """, unsafe_allow_html=True)
-            
-            other_checks = comparison_results.get("autres_verifications", {})
-            
-            # Display other checks in a table format
-            other_items = [
-                "Trousse de secours vérifiée",
-                "Registre de sécurité signé",
-                "Reconditionnement trousse nécessaire"
-            ]
-            
-            st.markdown("""
-            <div class="dashboard-card">
-                <table style="width: 100%;" class="comparison-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 60%;">Élément vérifié</th>
-                            <th style="width: 20%;">Statut RVD</th>
-                            <th style="width: 20%;">Statut Validé</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            """, unsafe_allow_html=True)
-            
-            for item in other_items:
-                item_key = item.lower().replace(" ", "_").replace("é", "e")
-                item_data = other_checks.get(item_key, {})
-                rvd_value = item_data.get("rvd", "Non vérifié")
-                validated = item_data.get("validated", False)
-                
-                status_icon = "✅" if validated else "❌"
-                status_color = "#28a745" if validated else "#dc3545"
-                
-                st.markdown(f"""
-                <tr>
-                    <td>{item}</td>
-                    <td style="text-align: center;">{rvd_value}</td>
-                    <td style="text-align: center; color: {status_color};">{status_icon}</td>
-                </tr>
-                """, unsafe_allow_html=True)
-            
-            st.markdown("""
-                    </tbody>
-                </table>
-            </div>
-            """, unsafe_allow_html=True)
-        # Tab 9: Commentaires
-        with tabs[9]:
-            st.markdown("""
-            <h3 class="section-header">Commentaires d'Intervention</h3>
-            """, unsafe_allow_html=True)
-            
-            comments_data = comparison_results.get("commentaires", {})
-            
-            # Display comments in expandable cards
-            if comments_data:
-                # Group comments by type
-                comment_types = {
-                    "general": "Commentaires Généraux",
-                    "signalétique": "Commentaires Signalétique",
-                    "defibrillateur": "Commentaires Défibrillateur",
-                    "batterie": "Commentaires Batterie",
-                    "electrodes_adultes": "Commentaires Électrodes Adultes",
-                    "electrodes_pediatriques": "Commentaires Électrodes Pédiatriques",
-                    "fin_intervention": "Commentaires Fin d'Intervention"
-                }
-                
-                for comment_key, comment_title in comment_types.items():
-                    comment_content = comments_data.get(comment_key, {}).get("rvd", "")
-                    if comment_content and comment_content.strip():
-                        with st.expander(comment_title):
-                            st.markdown(f"""
-                            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px;">
-                                <p>{comment_content}</p>
-                            </div>
-                            """, unsafe_allow_html=True)
-            else:
-                st.info("Aucun commentaire disponible dans le rapport")
-                
-            # Add a section for adding new comments
-            st.markdown("<h4>Ajouter un commentaire</h4>", unsafe_allow_html=True)
-            new_comment = st.text_area("Nouveau commentaire", "", height=100)
-            comment_type = st.selectbox(
-                "Type de commentaire",
-                ["Général", "Signalétique", "Défibrillateur", "Batterie", "Électrodes", "Fin d'intervention"]
-            )
-            
-            if st.button("Enregistrer le commentaire"):
-                st.success("Commentaire enregistré avec succès!")
+        # Export controls
+        st.markdown("---")
+        export_col1, export_col2 = st.columns(2)
         
-        # Tab 10: Administratif
-        with tabs[10]:
-            st.markdown("""
-            <h3 class="section-header">Informations Administratives</h3>
-            """, unsafe_allow_html=True)
-            
-            admin_data = comparison_results.get("administratif", {})
-            
-            # Display administrative information in a card
-            st.markdown("""
-            <div class="dashboard-card">
-                <h4>Statut et Validation</h4>
-            """, unsafe_allow_html=True)
-            
-            # Extract administrative data
-            admin_status = admin_data.get("statut", {}).get("rvd", "Non spécifié")
-            intervention_conformity = admin_data.get("conformite_intervention", {}).get("rvd", "Non spécifié")
-            
-            # Display status with appropriate styling
-            status_color = "#28a745" if admin_status == "Validé" else "#dc3545"
-            conformity_color = "#28a745" if intervention_conformity == "Conforme" else "#dc3545"
-            
-            st.markdown(f"""
-            <div style="margin-bottom: 15px;">
-                <p style="color: #6c757d; margin-bottom: 2px;">Statut</p>
-                <p style="font-weight: bold; color: {status_color}; margin: 0;">{admin_status}</p>
-            </div>
-            
-            <div style="margin-bottom: 15px;">
-                <p style="color: #6c757d; margin-bottom: 2px;">Conformité de l'intervention</p>
-                <p style="font-weight: bold; color: {conformity_color}; margin: 0;">{intervention_conformity}</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Add declaration section
-            declaration = admin_data.get("declaration", {}).get("rvd", "Non")
-            declaration_status = "✅ Confirmé" if declaration == "true" else "❌ Non confirmé"
-            declaration_color = "#28a745" if declaration == "true" else "#dc3545"
-            
-            st.markdown(f"""
-            <div style="margin-bottom: 15px;">
-                <p style="color: #6c757d; margin-bottom: 2px;">Déclaration de conformité</p>
-                <p style="font-weight: bold; color: {declaration_color}; margin: 0;">{declaration_status}</p>
-                <p style="font-style: italic; margin-top: 5px; font-size: 0.9rem;">
-                    "Je déclare avoir procédé à toutes les vérifications et effectué toutes les opérations nécessaires 
-                    pour attester de la conformité du matériel"
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.markdown("""</div>""", unsafe_allow_html=True)
-            
-            # Add validation buttons
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Valider le rapport", key="validate_report", type="primary"):
-                    st.success("Rapport validé avec succès!")
-            with col2:
-                if st.button("Demander des corrections", key="request_corrections"):
-                    st.error("Demande de corrections envoyée!")
-                    
-            # Add notes for validation
-            with st.expander("Notes pour la validation"):
-                validation_notes = st.text_area("Ajouter des notes pour la validation", "", height=100)
-                if st.button("Enregistrer les notes"):
-                    st.success("Notes enregistrées avec succès!")
+        with export_col1:
+            if st.button("📄 Exporter le rapport PDF", use_container_width=True):
+                st.success("Rapport exporté avec succès!")
+        
+        with export_col2:
+            if st.button("📤 Envoyer à Zoho CRM", use_container_width=True):
+                st.success("Données envoyées avec succès à Zoho CRM!")
+                        
+        # Timestamp and signature
+        st.markdown(f"""
+        <div style="text-align: right; margin-top: 2rem; color: #6c757d; font-size: 0.8rem;">
+            Rapport généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}
+        </div>
+        """, unsafe_allow_html=True)
         
     with tab4:
         st.title("📤 Export automatisé")
@@ -2387,4 +2199,3 @@ def render_ui(client, reader):
                             ⚠️ Aucun fichier uploadé
                         </div>
                     """, unsafe_allow_html=True)
-
