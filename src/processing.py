@@ -209,7 +209,7 @@ def process_image_file(
         result = classify_image(client, temp_file_path)
         detected_classes = [
             pred['class'] for pred in result.get('predictions', [])
-            if pred['confidence'] > 0.5
+            if pred['confidence'] > 0.3
         ]
         
         # Process based on classification
